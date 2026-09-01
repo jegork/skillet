@@ -7,6 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jegork/skillet/internal/inventory"
 	"github.com/jegork/skillet/internal/testhome"
@@ -83,8 +84,9 @@ func TestListRendersSkillsAndStatus(t *testing.T) {
 			t.Errorf("view missing %q:\n%s", want, out)
 		}
 	}
-	// the dir path may word-wrap in the preview, so compare without whitespace
-	joined := strings.NewReplacer("\n", "", " ", "").Replace(out)
+	// the dir path may wrap anywhere in the preview, so compare without
+	// whitespace or styling
+	joined := strings.NewReplacer("\n", "", " ", "").Replace(ansi.Strip(out))
 	if want := filepath.Join(".agents", "skills", "alpha"); !strings.Contains(joined, want) {
 		t.Errorf("preview missing dir %q:\n%s", want, out)
 	}
