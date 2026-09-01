@@ -10,7 +10,7 @@ directly. Two backends: `chezmoi` (default) or `git`.
 ## Install
 
 ```sh
-make install          # builds to ~/.local/bin/skillet
+task install          # builds to ~/.local/bin/skillet
 ```
 
 Releases are cut by Release Please: merging its release PR tags the version,
@@ -88,6 +88,7 @@ ever staged, diffed, committed or pushed.
 ## Develop
 
 ```sh
-make test             # chezmoi integration tests run when chezmoi is on PATH
-make lint
+task test             # chezmoi integration tests run when chezmoi is on PATH
+task lint
+task --list
 ```
