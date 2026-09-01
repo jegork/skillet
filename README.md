@@ -31,7 +31,7 @@ skillet readme        # regenerate the README index
 | `/` | filter by name, `esc` clears |
 | `e` `enter` | open `SKILL.md` in `$VISUAL` / `$EDITOR` (own skills only) |
 | `c` `x` `o` | toggle visibility for claude / codex / omp |
-| `n` | rename (own only): dir, frontmatter, cross-references, stubs, README row |
+| `p` | refine (own only): pick claude / omp / codex and launch it on the skill with a prefilled message |
 | `s` | capture into the store, review the diff, commit, push |
 | `d` | doctor report |
 | `R` | regenerate the README index, keeping its hand-made sections |

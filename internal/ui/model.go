@@ -36,6 +36,7 @@ const (
 	modeHelp
 	modeSync
 	modeRename
+	modeRefine
 )
 
 type pane int
@@ -57,6 +58,7 @@ type inventoryMsg struct {
 	err error
 }
 type editorDoneMsg struct{ err error }
+type refineDoneMsg struct{ err error }
 
 type Model struct {
 	cfg    Config
@@ -80,6 +82,7 @@ type Model struct {
 	flash         string
 	lastSelected  string
 	renameInput   textinput.Model
+	refineAgents  []string
 	selectNext    string // skill to select after the next reload
 }
 
@@ -137,6 +140,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.flash = "editor: " + msg.err.Error()
 		}
 		return m, m.reload()
+	case refineDoneMsg:
+		if msg.err != nil {
+			m.flash = "refine: " + msg.err.Error()
+		}
+		return m, m.reload()
 	case capturedMsg, committedMsg, pushedMsg:
 		return m.updateSync(msg)
 	case tea.KeyPressMsg:
@@ -152,6 +160,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.mode == modeRename {
 		return m.updateRename(msg)
+	}
+	if m.mode == modeRefine {
+		return m.updateRefine(msg)
 	}
 	if m.list.SettingFilter() {
 		return m.forward(msg)
@@ -197,6 +208,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.edit()
 	case key.Matches(msg, m.keys.Toggle):
 		return m.toggle(msg.String())
+	case key.Matches(msg, m.keys.Refine):
+		return m.startRefine()
 	case key.Matches(msg, m.keys.Rename):
 		return m.startRename()
 	case key.Matches(msg, m.keys.Sync):
@@ -466,6 +479,71 @@ func (m Model) updateRename(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// refineAgentNames are the CLIs refine can launch, probed with lookPath in
+// this order.
+var refineAgentNames = []string{"claude", "omp", "codex"}
+
+var lookPath = exec.LookPath
+
+func refineAgentChoices() []string {
+	var found []string
+	for _, name := range refineAgentNames {
+		if _, err := lookPath(name); err == nil {
+			found = append(found, name)
+		}
+	}
+	return found
+}
+
+func (m Model) startRefine() (tea.Model, tea.Cmd) {
+	it, ok := m.list.SelectedItem().(item)
+	if !ok {
+		return m, nil
+	}
+	if it.skill.Origin.Vendored {
+		m.flash = it.skill.Origin.String() + ": refine disabled, pnpx skills owns this one"
+		return m, nil
+	}
+	agents := refineAgentChoices()
+	if len(agents) == 0 {
+		m.flash = fmt.Sprintf("no agent on PATH (looked for %s)", strings.Join(refineAgentNames, ", "))
+		return m, nil
+	}
+	m.mode = modeRefine
+	m.refineAgents = agents
+	return m, nil
+}
+
+func (m Model) updateRefine(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, m.keys.Back) {
+		m.mode = modeList
+		return m, nil
+	}
+	s := msg.String()
+	if len(s) != 1 || s[0] < '1' || int(s[0]-'1') >= len(m.refineAgents) {
+		return m, nil
+	}
+	agent := m.refineAgents[s[0]-'1']
+	m.mode = modeList
+	return m, tea.ExecProcess(refineCmd(agent, m.list.SelectedItem().(item).skill.Dir),
+		func(err error) tea.Msg { return refineDoneMsg{err} })
+}
+
+// refinePrompt is the message prefilled for the agent, kept in one place.
+func refinePrompt(dir string) string {
+	return fmt.Sprintf("Refine the skill at %s. Read it fully first, then tighten the "+
+		"description trigger line, fix unclear steps, and keep frontmatter valid. "+
+		"Do not rename the skill.", filepath.Join(dir, "SKILL.md"))
+}
+
+// refineCmd builds the launch command; all three CLIs take the prompt as a
+// positional argument.
+func refineCmd(agent, dir string) *exec.Cmd {
+	c := exec.Command(agent, refinePrompt(dir))
+	c.Dir = dir
+	return c
+}
+
 func (m Model) startSync() (tea.Model, tea.Cmd) {
 	if m.cfg.Store == nil {
 		m.flash = "no store configured"
@@ -593,6 +671,13 @@ func (m Model) renderSync() string {
 func (m Model) flashLine() string {
 	if m.mode == modeRename {
 		return m.renameInput.View()
+	}
+	if m.mode == modeRefine {
+		parts := []string{"refine with:"}
+		for i, a := range m.refineAgents {
+			parts = append(parts, fmt.Sprintf("%d %s", i+1, a))
+		}
+		return m.styles.flash.Render(pad(strings.Join(parts, " · ")+" · esc cancel", m.width))
 	}
 	if m.flash == "" {
 		return ""
