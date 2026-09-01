@@ -27,16 +27,13 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# release-please owns the notes and the GitHub release; goreleaser only
+# attaches the binaries
 changelog:
-  use: github
-  sort: asc
-  filters:
-    exclude:
-      - "^chore"
-      - "^docs"
-      - "^test"
+  disable: true
 
 release:
+  mode: keep-existing
   github:
     owner: jegork
     name: skillet

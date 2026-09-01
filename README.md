@@ -13,7 +13,8 @@ never edited directly.
 make install          # builds to ~/.local/bin/skillet
 ```
 
-Tagged releases ship darwin/linux binaries via GoReleaser.
+Releases are cut by Release Please: merging its release PR tags the version,
+writes the changelog, and GoReleaser attaches darwin/linux binaries.
 
 ## Use
 
