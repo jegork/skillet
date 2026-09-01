@@ -78,10 +78,15 @@ func TestListRendersSkillsAndStatus(t *testing.T) {
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
 	m = next.(Model)
 	out := view(m)
-	for _, want := range []string{"alpha", "beta", "vend", "acme/skills", "store: none", "doctor:", "does alpha things", filepath.Join(".agents", "skills", "alpha")} {
+	for _, want := range []string{"alpha", "beta", "vend", "acme/skills", "store: none", "doctor:", "does alpha things"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("view missing %q:\n%s", want, out)
 		}
+	}
+	// the dir path may word-wrap in the preview, so compare without whitespace
+	joined := strings.NewReplacer("\n", "", " ", "").Replace(out)
+	if want := filepath.Join(".agents", "skills", "alpha"); !strings.Contains(joined, want) {
+		t.Errorf("preview missing dir %q:\n%s", want, out)
 	}
 	lines := strings.Split(out, "\n")
 	if len(lines) != 40 {
