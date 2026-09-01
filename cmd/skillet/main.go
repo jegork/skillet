@@ -12,6 +12,7 @@ import (
 
 	"github.com/jegork/skillet/internal/doctor"
 	"github.com/jegork/skillet/internal/inventory"
+	"github.com/jegork/skillet/internal/readme"
 	"github.com/jegork/skillet/internal/store"
 	"github.com/jegork/skillet/internal/store/chezmoi"
 	"github.com/jegork/skillet/internal/ui"
@@ -32,7 +33,7 @@ func main() {
 	fs.StringVar(&home, "home", home, "home directory to manage")
 	showVersion := fs.Bool("version", false, "print version")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [doctor|status]")
+		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [doctor|status|readme]")
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(os.Args[1:])
@@ -46,6 +47,8 @@ func main() {
 		err = runDoctor(home)
 	case "status":
 		err = runStatus(home)
+	case "readme":
+		err = runReadme(home)
 	case "":
 		err = runTUI(home)
 	default:
@@ -112,6 +115,19 @@ func runDoctor(home string) error {
 	if failed {
 		return fmt.Errorf("doctor found errors")
 	}
+	return nil
+}
+
+func runReadme(home string) error {
+	inv, err := inventory.Load(home)
+	if err != nil {
+		return err
+	}
+	res, err := readme.Regenerate(inv.Paths.Readme(), inv.Skills)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("README index regenerated: +%d -%d\n", res.Added, res.Removed)
 	return nil
 }
 

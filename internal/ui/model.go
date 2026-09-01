@@ -19,6 +19,7 @@ import (
 
 	"github.com/jegork/skillet/internal/doctor"
 	"github.com/jegork/skillet/internal/inventory"
+	"github.com/jegork/skillet/internal/readme"
 	"github.com/jegork/skillet/internal/store"
 )
 
@@ -164,6 +165,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.toggleMode(modeDoctor)
 		return m, nil
 	case key.Matches(msg, m.keys.Reload):
+		return m, m.reload()
+	case key.Matches(msg, m.keys.Readme):
+		res, err := readme.Regenerate(m.inv.Paths.Readme(), m.inv.Skills)
+		if err != nil {
+			m.flash = "README: " + err.Error()
+			return m, nil
+		}
+		m.flash = fmt.Sprintf("README index regenerated: +%d -%d", res.Added, res.Removed)
 		return m, m.reload()
 	case key.Matches(msg, m.keys.Focus):
 		if m.focus == paneList {

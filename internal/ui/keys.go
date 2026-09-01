@@ -3,8 +3,8 @@ package ui
 import "charm.land/bubbles/v2/key"
 
 type keyMap struct {
-	Up, Down, Filter, Edit, Sync, Doctor, Reload, Focus, Help, Quit, Back key.Binding
-	Confirm, TogglePush                                                   key.Binding
+	Up, Down, Filter, Edit, Sync, Doctor, Reload, Readme, Focus, Help, Quit, Back key.Binding
+	Confirm, TogglePush                                                           key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -16,6 +16,7 @@ func newKeyMap() keyMap {
 		Sync:       key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
 		Doctor:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "doctor")),
 		Reload:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
+		Readme:     key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "regenerate README index")),
 		Focus:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "focus preview")),
 		Help:       key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
@@ -32,7 +33,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Filter, k.Focus},
-		{k.Edit, k.Sync, k.Doctor, k.Reload},
+		{k.Edit, k.Sync, k.Doctor, k.Reload, k.Readme},
 		{k.Help, k.Back, k.Quit},
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/jegork/skillet/internal/consumer"
+	"github.com/jegork/skillet/internal/readme"
 	"github.com/jegork/skillet/internal/skill"
 )
 
@@ -59,7 +60,7 @@ func Run(in Input) []Finding {
 	out = append(out, skillFiles(in.Skills)...)
 	out = append(out, stubs(in.Reports)...)
 	out = append(out, xrefs(in.Skills, known)...)
-	out = append(out, readme(in.Paths.Readme(), in.Skills)...)
+	out = append(out, readmeCheck(in.Paths.Readme(), in.Skills)...)
 	out = append(out, lockOrphans(in.Lock, known)...)
 	return out
 }
@@ -145,22 +146,15 @@ func xrefs(skills []skill.Skill, known map[string]skill.Skill) []Finding {
 	return out
 }
 
-var readmeRowRe = regexp.MustCompile("^\\| `([^`]+)` \\| ([^|]*?) \\|")
-
-func readme(path string, skills []skill.Skill) []Finding {
-	b, err := os.ReadFile(path)
+func readmeCheck(path string, skills []skill.Skill) []Finding {
+	idx, err := readme.Parse(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return []Finding{{"readme", "", Error, "README.md index is missing"}}
 	}
 	if err != nil {
 		return []Finding{{"readme", "", Error, err.Error()}}
 	}
-	listed := map[string]string{}
-	for _, line := range strings.Split(string(b), "\n") {
-		if m := readmeRowRe.FindStringSubmatch(line); m != nil {
-			listed[m[1]] = m[2]
-		}
-	}
+	listed := idx.Origins
 	var out []Finding
 	onDisk := map[string]bool{}
 	for _, s := range skills {
