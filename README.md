@@ -22,6 +22,7 @@ writes the changelog, and GoReleaser attaches darwin/linux binaries.
 skillet               # the TUI
 skillet doctor        # findings as text, exit 1 on errors
 skillet status        # store drift: uncaptured, uncommitted, ahead
+skillet readme        # regenerate the README index
 ```
 
 | key | action |
@@ -29,8 +30,11 @@ skillet status        # store drift: uncaptured, uncommitted, ahead
 | `j` `k` | move |
 | `/` | filter by name, `esc` clears |
 | `e` `enter` | open `SKILL.md` in `$VISUAL` / `$EDITOR` (own skills only) |
+| `c` `x` `o` | toggle visibility for claude / codex / omp |
+| `n` | rename (own only): dir, frontmatter, cross-references, stubs, README row |
 | `s` | capture into the store, review the diff, commit, push |
 | `d` | doctor report |
+| `R` | regenerate the README index, keeping its hand-made sections |
 | `r` | rescan |
 | `tab` | scroll the preview |
 | `?` | help |
@@ -43,12 +47,19 @@ Columns: origin (`own` or `vend owner/repo` from `~/.agents/.skill-lock.json`),
 consumer badges (`C` claude, `X` codex, `O` omp), doctor finding count, last
 modified.
 
+Doctor checks: broken consumer stubs, cross-references to unknown skills,
+stale README rows, lock entries without a folder, missing SKILL.md or
+description, and vendored folders whose git tree hash differs from the lock
+(info only, since `pnpx skills` rewrites some frontmatter on install).
+
 ## Layout
 
 ```
 internal/skill      scan skills + lock file
 internal/consumer   which tool sees which skill (symlink dirs, omp ignore globs)
-internal/doctor     dangling stubs, unknown cross-references, stale README, lock orphans
+internal/doctor     dangling stubs, unknown cross-references, stale README, lock orphans, drift
+internal/readme     README index parse and regeneration
+internal/rename     rename an own skill and fix everything that pointed at it
 internal/store      Store interface: Status / Capture / Diff / Commit / Push
 internal/store/chezmoi
 internal/ui         bubbletea front end
