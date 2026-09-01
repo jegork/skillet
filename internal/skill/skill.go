@@ -38,6 +38,8 @@ type Skill struct {
 	Dir         string
 	Description string
 	FMName      string
+	Author      string // frontmatter metadata.author, a vendor marker
+	License     string
 	Origin      Origin
 	ModTime     time.Time
 	HasSkillMD  bool
@@ -47,6 +49,10 @@ type Skill struct {
 type Frontmatter struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
+	License     string `yaml:"license"`
+	Metadata    struct {
+		Author string `yaml:"author"`
+	} `yaml:"metadata"`
 }
 
 var ErrNoFrontmatter = errors.New("no frontmatter")
@@ -134,6 +140,7 @@ func read(dir string) (Skill, error) {
 	s.HasSkillMD = true
 	if fm, err := ParseFrontmatter(b); err == nil {
 		s.FMName, s.Description = fm.Name, fm.Description
+		s.Author, s.License = fm.Metadata.Author, fm.License
 	}
 	return s, nil
 }

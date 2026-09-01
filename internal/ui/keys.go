@@ -6,6 +6,7 @@ type keyMap struct {
 	Up, Down, Filter, Edit, Refine, Sync, Doctor, Reload, Readme, Focus, Help, Quit, Back key.Binding
 	Confirm, TogglePush                                                                   key.Binding
 	Toggle, Rename                                                                        key.Binding
+	Tree, Collapse, Expand                                                                key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -27,16 +28,19 @@ func newKeyMap() keyMap {
 		Back:       key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		Confirm:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "commit")),
 		TogglePush: key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "toggle push")),
+		Tree:       key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "tree view")),
+		Collapse:   key.NewBinding(key.WithKeys("left"), key.WithHelp("←", "collapse group")),
+		Expand:     key.NewBinding(key.WithKeys("right"), key.WithHelp("→", "expand group")),
 	}
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Edit, k.Refine, k.Toggle, k.Sync, k.Filter, k.Doctor, k.Help, k.Quit}
+	return []key.Binding{k.Edit, k.Refine, k.Toggle, k.Sync, k.Filter, k.Tree, k.Doctor, k.Help, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.Filter, k.Focus},
+		{k.Up, k.Down, k.Filter, k.Tree, k.Focus},
 		{k.Edit, k.Refine, k.Toggle, k.Rename, k.Sync, k.Doctor, k.Reload, k.Readme},
 		{k.Help, k.Back, k.Quit},
 	}

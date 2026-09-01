@@ -1,0 +1,42 @@
+version: "3"
+
+vars:
+  BIN: skillet
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  LDFLAGS: -ldflags "-X main.version={{.VERSION}}"
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  build:
+    desc: build the binary into the repo root
+    cmds:
+      - go build {{.LDFLAGS}} -o {{.BIN}} ./cmd/skillet
+
+  install:
+    desc: build and install to ~/.local/bin
+    cmds:
+      - go build {{.LDFLAGS}} -o $HOME/.local/bin/{{.BIN}} ./cmd/skillet
+
+  test:
+    desc: run all tests (chezmoi integration tests run when chezmoi is on PATH)
+    cmds:
+      - go test ./...
+
+  fmt:
+    desc: gofmt the tree
+    cmds:
+      - gofmt -w .
+
+  lint:
+    desc: gofmt check, go vet, golangci-lint when installed
+    cmds:
+      - |
+        out="$(gofmt -l .)"
+        if [ -n "$out" ]; then echo "gofmt:"; echo "$out"; exit 1; fi
+      - go vet ./...
+      - |
+        if command -v golangci-lint >/dev/null 2>&1; then golangci-lint run; fi

@@ -283,3 +283,18 @@ func TestRefineCommand(t *testing.T) {
 		}
 	}
 }
+
+func TestQuitKey(t *testing.T) {
+	m := newTestModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = next.(Model)
+	for _, k := range []tea.KeyPressMsg{{Code: 'q', Text: "q"}, {Code: 'c', Mod: tea.ModCtrl}} {
+		_, cmd := m.Update(k)
+		if cmd == nil {
+			t.Fatalf("%s: no command returned", k)
+		}
+		if _, ok := cmd().(tea.QuitMsg); !ok {
+			t.Errorf("%s: expected tea.QuitMsg", k)
+		}
+	}
+}
