@@ -63,6 +63,7 @@ func Run(in Input) []Finding {
 	out = append(out, readmeCheck(in.Paths.Readme(), in.Skills)...)
 	out = append(out, lockOrphans(in.Lock, known)...)
 	out = append(out, drift(in.Skills, in.Lock)...)
+	out = append(out, provenance(in.Skills)...)
 	return out
 }
 
@@ -177,6 +178,26 @@ func readmeCheck(path string, skills []skill.Skill) []Finding {
 		if !onDisk[n] {
 			out = append(out, Finding{"readme", "", Warn, fmt.Sprintf("README lists `%s` which does not exist", n)})
 		}
+	}
+	return out
+}
+
+// provenance flags own skills whose frontmatter carries vendor markers: they
+// were most likely installed before the lock file tracked them.
+func provenance(skills []skill.Skill) []Finding {
+	var out []Finding
+	for _, s := range skills {
+		if s.Origin.Vendored || (s.Author == "" && s.License == "") {
+			continue
+		}
+		var markers []string
+		if s.Author != "" {
+			markers = append(markers, "author "+s.Author)
+		}
+		if s.License != "" {
+			markers = append(markers, "license "+s.License)
+		}
+		out = append(out, Finding{"provenance", s.Name, Warn, "looks vendored (" + strings.Join(markers, ", ") + ") but is not in the lock file; adopt it with pnpx skills add"})
 	}
 	return out
 }
