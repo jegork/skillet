@@ -57,6 +57,9 @@ type Consumer interface {
 	// Enable makes the skill visible; Disable hides it. Both are idempotent.
 	Enable(name string) error
 	Disable(name string) error
+	// Forget drops every trace of the name without changing what other
+	// skills see; used when a skill is renamed or removed.
+	Forget(name string) error
 }
 
 // SymlinkDir is a consumer that sees a skill when <dir>/<name> is a symlink
@@ -155,6 +158,8 @@ func (c *SymlinkDir) Disable(name string) error {
 	return os.Remove(p)
 }
 
+func (c *SymlinkDir) Forget(name string) error { return c.Disable(name) }
+
 // Omp reads the skills dir directly and hides names matching the
 // skills.ignoredSkills globs in its config.
 type Omp struct {
@@ -231,6 +236,24 @@ func (c *Omp) Disable(name string) error {
 		}
 	}
 	seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: name})
+	return c.save(doc)
+}
+
+func (c *Omp) Forget(name string) error {
+	doc, seq, err := c.load()
+	if err != nil {
+		return err
+	}
+	kept := seq.Content[:0]
+	for _, n := range seq.Content {
+		if n.Value != name {
+			kept = append(kept, n)
+		}
+	}
+	if len(kept) == len(seq.Content) {
+		return nil
+	}
+	seq.Content = kept
 	return c.save(doc)
 }
 

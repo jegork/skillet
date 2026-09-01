@@ -181,3 +181,28 @@ func TestToggleConsumers(t *testing.T) {
 		t.Errorf("omp not re-enabled: %v", it.enabled)
 	}
 }
+
+func TestRenameFlow(t *testing.T) {
+	m := newTestModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = press(next.(Model), "n")
+	if m.mode != modeRename {
+		t.Fatalf("mode %v", m.mode)
+	}
+	// input is prefilled with "alpha"; append "2" and confirm
+	m = press(m, "2", "enter")
+	if m.mode != modeList || !strings.HasPrefix(m.flash, "renamed alpha -> alpha2") {
+		t.Fatalf("mode %v flash %q", m.mode, m.flash)
+	}
+	if it := m.list.SelectedItem().(item); it.skill.Name != "alpha2" {
+		t.Errorf("selected %q after rename", it.skill.Name)
+	}
+	m = press(m, "j", "j", "n") // vend
+	if m.mode != modeList || !strings.Contains(m.flash, "rename disabled") {
+		t.Errorf("vendored rename: mode %v flash %q", m.mode, m.flash)
+	}
+	m = press(m, "k", "n", "esc")
+	if m.mode != modeList {
+		t.Errorf("esc should cancel rename, mode %v", m.mode)
+	}
+}

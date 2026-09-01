@@ -13,6 +13,7 @@ import (
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -21,6 +22,7 @@ import (
 	"github.com/jegork/skillet/internal/doctor"
 	"github.com/jegork/skillet/internal/inventory"
 	"github.com/jegork/skillet/internal/readme"
+	"github.com/jegork/skillet/internal/rename"
 	"github.com/jegork/skillet/internal/store"
 )
 
@@ -33,6 +35,7 @@ const (
 	modeDoctor
 	modeHelp
 	modeSync
+	modeRename
 )
 
 type pane int
@@ -76,6 +79,8 @@ type Model struct {
 	statusPending bool
 	flash         string
 	lastSelected  string
+	renameInput   textinput.Model
+	selectNext    string // skill to select after the next reload
 }
 
 func New(cfg Config) Model {
@@ -91,6 +96,8 @@ func New(cfg Config) Model {
 	m.preview = viewport.New()
 	m.help = help.New()
 	m.help.ShowAll = true
+	m.renameInput = textinput.New()
+	m.renameInput.Prompt = "rename to: "
 	m.setInventory(m.inv)
 	return m
 }
@@ -143,6 +150,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeSync {
 		return m.updateSync(msg)
 	}
+	if m.mode == modeRename {
+		return m.updateRename(msg)
+	}
 	if m.list.SettingFilter() {
 		return m.forward(msg)
 	}
@@ -187,6 +197,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.edit()
 	case key.Matches(msg, m.keys.Toggle):
 		return m.toggle(msg.String())
+	case key.Matches(msg, m.keys.Rename):
+		return m.startRename()
 	case key.Matches(msg, m.keys.Sync):
 		return m.startSync()
 	}
@@ -230,8 +242,9 @@ func (m Model) reload() tea.Cmd {
 
 func (m *Model) setInventory(inv inventory.Inventory) {
 	m.inv = inv
-	selected := ""
-	if it, ok := m.list.SelectedItem().(item); ok {
+	selected := m.selectNext
+	m.selectNext = ""
+	if it, ok := m.list.SelectedItem().(item); ok && selected == "" {
 		selected = it.skill.Name
 	}
 	bySkill := doctor.BySkill(inv.Findings)
@@ -274,6 +287,7 @@ func (m *Model) resize() {
 	m.sync.diff.SetWidth(m.width)
 	m.sync.diff.SetHeight(max(m.height-4, 1))
 	m.sync.msg.SetWidth(max(m.width-12, 10))
+	m.renameInput.SetWidth(max(m.width-14, 10))
 	m.help.SetWidth(m.preview.Width())
 	m.refreshPreview()
 }
@@ -405,6 +419,53 @@ func (m Model) toggle(letter string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) startRename() (tea.Model, tea.Cmd) {
+	it, ok := m.list.SelectedItem().(item)
+	if !ok {
+		return m, nil
+	}
+	if it.skill.Origin.Vendored {
+		m.flash = it.skill.Origin.String() + ": rename disabled, pnpx skills owns this one"
+		return m, nil
+	}
+	m.mode = modeRename
+	m.renameInput.SetValue(it.skill.Name)
+	m.renameInput.CursorEnd()
+	return m, m.renameInput.Focus()
+}
+
+func (m Model) updateRename(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Back):
+		m.mode = modeList
+		m.renameInput.Blur()
+		return m, nil
+	case key.Matches(msg, m.keys.Confirm):
+		it, ok := m.list.SelectedItem().(item)
+		if !ok {
+			m.mode = modeList
+			return m, nil
+		}
+		newName := strings.TrimSpace(m.renameInput.Value())
+		m.mode = modeList
+		m.renameInput.Blur()
+		rep, err := rename.Rename(m.inv.Paths, m.inv.Skills, m.cfg.Consumers, it.skill.Name, newName)
+		if err != nil {
+			m.flash = "rename: " + err.Error()
+			return m, nil
+		}
+		m.flash = fmt.Sprintf("renamed %s -> %s, %d files rewritten", it.skill.Name, newName, rep.RewrittenFiles)
+		if len(rep.VendoredRefs) > 0 {
+			m.flash += ", still referenced by vendored " + strings.Join(rep.VendoredRefs, ", ")
+		}
+		m.selectNext = newName
+		return m, m.reload()
+	}
+	var cmd tea.Cmd
+	m.renameInput, cmd = m.renameInput.Update(msg)
+	return m, cmd
+}
+
 func (m Model) startSync() (tea.Model, tea.Cmd) {
 	if m.cfg.Store == nil {
 		m.flash = "no store configured"
@@ -530,6 +591,9 @@ func (m Model) renderSync() string {
 }
 
 func (m Model) flashLine() string {
+	if m.mode == modeRename {
+		return m.renameInput.View()
+	}
 	if m.flash == "" {
 		return ""
 	}

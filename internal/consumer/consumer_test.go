@@ -223,3 +223,31 @@ func TestOmpToggle(t *testing.T) {
 		t.Errorf("fresh config: %v %v", rep.Enabled, err)
 	}
 }
+
+func TestForget(t *testing.T) {
+	h := testhome.New(t)
+	h.Skill("a", "A")
+	h.Stub(".claude/skills", "a", "../../.agents/skills/a")
+	claude := consumer.NewSymlinkDir("claude", filepath.Join(h.Dir, ".claude", "skills"), h.SkillsDir())
+	if err := claude.Forget("a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(h.Dir, ".claude", "skills", "a")); !os.IsNotExist(err) {
+		t.Error("stub still there")
+	}
+	if err := claude.Forget("a"); err != nil {
+		t.Errorf("forget twice: %v", err)
+	}
+
+	omp := consumer.NewOmp(h.OmpIgnore("handoff", "omp-*"))
+	if err := omp.Forget("handoff"); err != nil {
+		t.Fatal(err)
+	}
+	if err := omp.Forget("omp-review"); err != nil {
+		t.Errorf("forget of a glob-hidden name must not error: %v", err)
+	}
+	rep, _ := omp.Report(skills("handoff", "omp-review"))
+	if !rep.Enabled["handoff"] || rep.Enabled["omp-review"] {
+		t.Errorf("enabled %v", rep.Enabled)
+	}
+}
