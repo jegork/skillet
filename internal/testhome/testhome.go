@@ -52,15 +52,23 @@ func (h *Home) File(name, rel, content string) string {
 }
 
 // Lock writes .skill-lock.json v3 with name -> "owner/repo" entries.
-func (h *Home) Lock(entries map[string]string) {
+func (h *Home) Lock(entries map[string]string) { h.LockWithHashes(entries, nil) }
+
+// LockWithHashes is Lock with an explicit skillFolderHash per name.
+func (h *Home) LockWithHashes(entries map[string]string, hashes map[string]string) {
 	skills := map[string]any{}
 	for name, source := range entries {
+		// empty by default so the drift check stays quiet unless a test asks for it
+		hash := ""
+		if v, ok := hashes[name]; ok {
+			hash = v
+		}
 		skills[name] = map[string]any{
 			"source":          source,
 			"sourceType":      "github",
 			"sourceUrl":       "https://github.com/" + source + ".git",
 			"skillPath":       "skills/" + name + "/SKILL.md",
-			"skillFolderHash": "0000000000000000000000000000000000000000",
+			"skillFolderHash": hash,
 			"installedAt":     "2026-04-02T19:20:46.521Z",
 			"updatedAt":       "2026-08-03T07:56:20.074Z",
 		}

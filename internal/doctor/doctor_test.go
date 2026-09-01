@@ -159,3 +159,21 @@ func TestLockOrphan(t *testing.T) {
 
 	expect(t, run(t, h), key{"lock-orphan", "", doctor.Warn})
 }
+
+func TestDriftAgainstLockHash(t *testing.T) {
+	h := testhome.New(t)
+	h.Skill("same", "S")
+	h.Skill("changed", "C")
+	h.Skill("own", "O")
+	h.Readme("| `same` | vendored (acme/a) | S |", "| `changed` | vendored (acme/b) | C |", "| `own` | own | O |")
+	sameHash, err := skill.TreeHash(filepath.Join(h.SkillsDir(), "same"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.LockWithHashes(map[string]string{"same": "acme/a", "changed": "acme/b"}, map[string]string{
+		"same":    sameHash,
+		"changed": "0000000000000000000000000000000000000000",
+	})
+
+	expect(t, run(t, h), key{"drift", "changed", doctor.Info})
+}

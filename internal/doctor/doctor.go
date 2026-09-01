@@ -62,6 +62,7 @@ func Run(in Input) []Finding {
 	out = append(out, xrefs(in.Skills, known)...)
 	out = append(out, readmeCheck(in.Paths.Readme(), in.Skills)...)
 	out = append(out, lockOrphans(in.Lock, known)...)
+	out = append(out, drift(in.Skills, in.Lock)...)
 	return out
 }
 
@@ -175,6 +176,28 @@ func readmeCheck(path string, skills []skill.Skill) []Finding {
 	for _, n := range names {
 		if !onDisk[n] {
 			out = append(out, Finding{"readme", "", Warn, fmt.Sprintf("README lists `%s` which does not exist", n)})
+		}
+	}
+	return out
+}
+
+// drift compares vendored folders with the git tree hash the lock recorded.
+// Info only: pnpx skills rewrites some frontmatter on install, so a mismatch
+// is not always a local edit.
+func drift(skills []skill.Skill, lock skill.Lock) []Finding {
+	var out []Finding
+	for _, s := range skills {
+		entry, ok := lock.Skills[s.Name]
+		if !ok || len(entry.SkillFolderHash) != 40 {
+			continue
+		}
+		hash, err := skill.TreeHash(s.Dir)
+		if err != nil {
+			out = append(out, Finding{"drift", s.Name, Warn, err.Error()})
+			continue
+		}
+		if hash != entry.SkillFolderHash {
+			out = append(out, Finding{"drift", s.Name, Info, "folder differs from the lock file: edited locally, or rewritten by pnpx skills on install"})
 		}
 	}
 	return out
