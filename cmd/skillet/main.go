@@ -1,0 +1,139 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/jegork/skillet/internal/doctor"
+	"github.com/jegork/skillet/internal/inventory"
+	"github.com/jegork/skillet/internal/store"
+	"github.com/jegork/skillet/internal/store/chezmoi"
+	"github.com/jegork/skillet/internal/ui"
+)
+
+var version = "dev"
+
+var roots = []store.Root{
+	{Rel: ".agents/skills"},
+	{Rel: ".agents/.skill-lock.json"},
+	{Rel: ".claude/skills"},
+	{Rel: ".codex/skills", Exclude: []string{".system"}},
+}
+
+func main() {
+	home, _ := os.UserHomeDir()
+	fs := flag.NewFlagSet("skillet", flag.ExitOnError)
+	fs.StringVar(&home, "home", home, "home directory to manage")
+	showVersion := fs.Bool("version", false, "print version")
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [doctor|status]")
+		fs.PrintDefaults()
+	}
+	_ = fs.Parse(os.Args[1:])
+	if *showVersion {
+		fmt.Println("skillet", version)
+		return
+	}
+	var err error
+	switch fs.Arg(0) {
+	case "doctor":
+		err = runDoctor(home)
+	case "status":
+		err = runStatus(home)
+	case "":
+		err = runTUI(home)
+	default:
+		fs.Usage()
+		os.Exit(2)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "skillet:", err)
+		os.Exit(1)
+	}
+}
+
+func runTUI(home string) error {
+	inv, err := inventory.Load(home)
+	if err != nil {
+		return err
+	}
+	m := ui.New(ui.Config{
+		Inventory: inv,
+		Load:      func() (inventory.Inventory, error) { return inventory.Load(home) },
+		Store:     chezmoi.New(home, roots),
+	})
+	_, err = tea.NewProgram(m).Run()
+	return err
+}
+
+func runDoctor(home string) error {
+	inv, err := inventory.Load(home)
+	if err != nil {
+		return err
+	}
+	vendored := 0
+	for _, s := range inv.Skills {
+		if s.Origin.Vendored {
+			vendored++
+		}
+	}
+	fmt.Printf("%d skills (%d own, %d vendored)\n", len(inv.Skills), len(inv.Skills)-vendored, vendored)
+	for _, c := range inv.Consumers {
+		n := 0
+		for _, on := range inv.Reports[c].Enabled {
+			if on {
+				n++
+			}
+		}
+		fmt.Printf("  %-6s %d enabled\n", c, n)
+	}
+	if len(inv.Findings) == 0 {
+		fmt.Println("doctor: no findings")
+		return nil
+	}
+	fmt.Println()
+	failed := false
+	for _, f := range inv.Findings {
+		if f.Severity == doctor.Error {
+			failed = true
+		}
+		subject := f.Skill
+		if subject == "" {
+			subject = "(global)"
+		}
+		fmt.Printf("%-5s %-14s %-28s %s\n", f.Severity, f.Check, subject, f.Message)
+	}
+	if failed {
+		return fmt.Errorf("doctor found errors")
+	}
+	return nil
+}
+
+func runStatus(home string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	st, err := chezmoi.New(home, roots).Status(ctx)
+	if err != nil {
+		return err
+	}
+	ahead := "no upstream"
+	if st.Ahead >= 0 {
+		ahead = fmt.Sprintf("+%d", st.Ahead)
+	}
+	fmt.Printf("branch %s (%s)\n", st.Branch, ahead)
+	fmt.Printf("uncaptured: %d\n", len(st.Uncaptured))
+	for _, c := range st.Uncaptured {
+		fmt.Printf("  %s %s\n", c.Kind, c.Path)
+	}
+	fmt.Printf("uncommitted: %d\n", len(st.Uncommitted))
+	if len(st.Uncommitted) > 0 {
+		fmt.Println("  " + strings.Join(st.Uncommitted, "\n  "))
+	}
+	return nil
+}
