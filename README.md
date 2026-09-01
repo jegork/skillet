@@ -45,6 +45,8 @@ roots. Create it once with `skillet store init [--git-dir DIR] [--remote URL]`.
 | `d` | doctor report |
 | `R` | regenerate the README index, keeping its hand-made sections |
 | `i` | search skills.sh, `enter` installs the picked skill via `pnpx skills` |
+| `r` | rescan |
+| `tab` | scroll the preview |
 | `?` | help |
 | `q` | quit |
 

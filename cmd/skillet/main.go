@@ -234,6 +234,9 @@ func runInstall(home string, args []string) error {
 		return err
 	}
 	fmt.Printf("installed %s from %s\n", strings.Join(installed, ", "), source)
+	return nil
+}
+
 func runStore(home string, args []string) error {
 	if len(args) == 0 || args[0] != "init" {
 		fmt.Fprintln(os.Stderr, "usage: skillet store init [--git-dir DIR] [--remote URL]")
