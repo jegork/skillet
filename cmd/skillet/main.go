@@ -25,6 +25,7 @@ var roots = []store.Root{
 	{Rel: ".agents/.skill-lock.json"},
 	{Rel: ".claude/skills"},
 	{Rel: ".codex/skills", Exclude: []string{".system"}},
+	{Rel: ".omp/agent/config.yml"},
 }
 
 func main() {
@@ -70,6 +71,7 @@ func runTUI(home string) error {
 		Inventory: inv,
 		Load:      func() (inventory.Inventory, error) { return inventory.Load(home) },
 		Store:     chezmoi.New(home, roots),
+		Consumers: inventory.Consumers(home),
 	})
 	_, err = tea.NewProgram(m).Run()
 	return err

@@ -2,6 +2,7 @@
 package consumer
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -53,6 +54,9 @@ type Report struct {
 type Consumer interface {
 	Name() string
 	Report(skills []skill.Skill) (Report, error)
+	// Enable makes the skill visible; Disable hides it. Both are idempotent.
+	Enable(name string) error
+	Disable(name string) error
 }
 
 // SymlinkDir is a consumer that sees a skill when <dir>/<name> is a symlink
@@ -111,6 +115,46 @@ func (c *SymlinkDir) inspect(p string, e fs.DirEntry) (string, StubState) {
 	return target, StubOK
 }
 
+func (c *SymlinkDir) Enable(name string) error {
+	p := filepath.Join(c.dir, name)
+	if info, err := os.Lstat(p); err == nil {
+		if info.Mode()&fs.ModeSymlink == 0 {
+			return fmt.Errorf("%s: %s is not a symlink, refusing to replace it", c.name, p)
+		}
+		if _, state := c.inspect(p, fs.FileInfoToDirEntry(info)); state == StubOK {
+			return nil
+		}
+		if err := os.Remove(p); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if err := os.MkdirAll(c.dir, 0o755); err != nil {
+		return err
+	}
+	target, err := filepath.Rel(c.dir, filepath.Join(c.skillsDir, name))
+	if err != nil {
+		return err
+	}
+	return os.Symlink(target, p)
+}
+
+func (c *SymlinkDir) Disable(name string) error {
+	p := filepath.Join(c.dir, name)
+	info, err := os.Lstat(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&fs.ModeSymlink == 0 {
+		return fmt.Errorf("%s: %s is not a symlink, refusing to remove it", c.name, p)
+	}
+	return os.Remove(p)
+}
+
 // Omp reads the skills dir directly and hides names matching the
 // skills.ignoredSkills globs in its config.
 type Omp struct {
@@ -150,6 +194,104 @@ func (c *Omp) ignored() ([]string, error) {
 		return nil, fmt.Errorf("%s: %w", c.configPath, err)
 	}
 	return cfg.Skills.IgnoredSkills, nil
+}
+
+func (c *Omp) Enable(name string) error {
+	doc, seq, err := c.load()
+	if err != nil {
+		return err
+	}
+	kept := seq.Content[:0]
+	found := false
+	for _, n := range seq.Content {
+		if n.Value == name {
+			found = true
+			continue
+		}
+		if ok, _ := path.Match(n.Value, name); ok {
+			return fmt.Errorf("omp: %q is hidden by pattern %q in %s, edit the config by hand", name, n.Value, c.configPath)
+		}
+		kept = append(kept, n)
+	}
+	if !found {
+		return nil
+	}
+	seq.Content = kept
+	return c.save(doc)
+}
+
+func (c *Omp) Disable(name string) error {
+	doc, seq, err := c.load()
+	if err != nil {
+		return err
+	}
+	for _, n := range seq.Content {
+		if ok, _ := path.Match(n.Value, name); ok {
+			return nil
+		}
+	}
+	seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: name})
+	return c.save(doc)
+}
+
+// load parses the config as a node tree so comments survive a rewrite, and
+// returns the skills.ignoredSkills sequence, creating it when absent.
+func (c *Omp) load() (*yaml.Node, *yaml.Node, error) {
+	doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode}}}
+	b, err := os.ReadFile(c.configPath)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, err
+	}
+	if err == nil && len(b) > 0 {
+		doc = &yaml.Node{}
+		if err := yaml.Unmarshal(b, doc); err != nil {
+			return nil, nil, fmt.Errorf("%s: %w", c.configPath, err)
+		}
+		if len(doc.Content) == 0 {
+			doc.Content = []*yaml.Node{{Kind: yaml.MappingNode}}
+		}
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil, nil, fmt.Errorf("%s: top level is not a mapping", c.configPath)
+	}
+	skills := mappingChild(root, "skills", yaml.MappingNode)
+	seq := mappingChild(skills, "ignoredSkills", yaml.SequenceNode)
+	return doc, seq, nil
+}
+
+func mappingChild(m *yaml.Node, key string, kind yaml.Kind) *yaml.Node {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			if m.Content[i+1].Kind != kind {
+				m.Content[i+1] = &yaml.Node{Kind: kind}
+			}
+			return m.Content[i+1]
+		}
+	}
+	child := &yaml.Node{Kind: kind}
+	m.Content = append(m.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: key}, child)
+	return child
+}
+
+func (c *Omp) save(doc *yaml.Node) error {
+	if err := os.MkdirAll(filepath.Dir(c.configPath), 0o700); err != nil {
+		return err
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(doc); err != nil {
+		return err
+	}
+	if err := enc.Close(); err != nil {
+		return err
+	}
+	mode := os.FileMode(0o600)
+	if info, err := os.Stat(c.configPath); err == nil {
+		mode = info.Mode().Perm()
+	}
+	return os.WriteFile(c.configPath, buf.Bytes(), mode)
 }
 
 func matchesAny(patterns []string, name string) bool {

@@ -27,7 +27,11 @@ func newTestModel(t *testing.T) Model {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := New(Config{Inventory: inv, Load: func() (inventory.Inventory, error) { return inventory.Load(h.Dir) }})
+	m := New(Config{
+		Inventory: inv,
+		Load:      func() (inventory.Inventory, error) { return inventory.Load(h.Dir) },
+		Consumers: inventory.Consumers(h.Dir),
+	})
 	return m
 }
 
@@ -154,5 +158,26 @@ func TestSyncWithoutStore(t *testing.T) {
 	m = press(next.(Model), "s")
 	if m.mode != modeList || !strings.Contains(m.flash, "no store") {
 		t.Errorf("mode %v flash %q", m.mode, m.flash)
+	}
+}
+
+func TestToggleConsumers(t *testing.T) {
+	m := newTestModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = next.(Model) // alpha selected: claude on, codex off, omp on
+
+	m = press(m, "x")
+	it := m.list.SelectedItem().(item)
+	if !it.enabled["codex"] || !strings.Contains(m.flash, "codex enabled") {
+		t.Errorf("codex not enabled: %v flash %q", it.enabled, m.flash)
+	}
+	m = press(m, "o", "c")
+	it = m.list.SelectedItem().(item)
+	if it.enabled["omp"] || it.enabled["claude"] {
+		t.Errorf("omp/claude still enabled: %v", it.enabled)
+	}
+	m = press(m, "o")
+	if it = m.list.SelectedItem().(item); !it.enabled["omp"] {
+		t.Errorf("omp not re-enabled: %v", it.enabled)
 	}
 }

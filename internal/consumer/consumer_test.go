@@ -3,6 +3,7 @@ package consumer_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jegork/skillet/internal/consumer"
@@ -119,5 +120,106 @@ func TestOmpMalformedConfig(t *testing.T) {
 	}
 	if _, err := consumer.NewOmp(p).Report(skills("x")); err == nil {
 		t.Fatal("expected error for malformed yaml")
+	}
+}
+
+func TestSymlinkDirToggle(t *testing.T) {
+	h := testhome.New(t)
+	h.Skill("a", "A")
+	h.Skill("b", "B")
+	dir := filepath.Join(h.Dir, ".codex", "skills")
+	c := consumer.NewSymlinkDir("codex", dir, h.SkillsDir())
+
+	// enable creates the dir and a relative symlink
+	if err := c.Enable("a"); err != nil {
+		t.Fatal(err)
+	}
+	target, err := os.Readlink(filepath.Join(dir, "a"))
+	if err != nil || target != filepath.Join("..", "..", ".agents", "skills", "a") {
+		t.Fatalf("stub target %q err %v", target, err)
+	}
+	if err := c.Enable("a"); err != nil {
+		t.Errorf("enable twice must be a no-op: %v", err)
+	}
+
+	// a broken stub is replaced
+	h.Stub(".codex/skills", "b", "../../.agents/skills/gone")
+	if err := c.Enable("b"); err != nil {
+		t.Fatal(err)
+	}
+	rep, _ := c.Report(skills("a", "b"))
+	if !rep.Enabled["a"] || !rep.Enabled["b"] {
+		t.Errorf("enabled %v", rep.Enabled)
+	}
+
+	// disable removes symlinks only
+	if err := c.Disable("a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "a")); !os.IsNotExist(err) {
+		t.Error("stub a still there")
+	}
+	if err := c.Disable("a"); err != nil {
+		t.Errorf("disable of a missing stub must be a no-op: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "real"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Disable("real"); err == nil {
+		t.Error("disable must refuse to remove a real directory")
+	}
+	if err := c.Enable("real"); err == nil {
+		t.Error("enable must refuse to replace a real directory")
+	}
+}
+
+func TestOmpToggle(t *testing.T) {
+	h := testhome.New(t)
+	p := h.OmpIgnore("handoff", "omp-*")
+	if err := os.WriteFile(p, []byte("# keep this comment\nskills:\n  ignoredSkills:\n    - handoff\n    - omp-* # trailing\nother: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := consumer.NewOmp(p)
+	all := skills("handoff", "omp-review", "tdd")
+
+	if err := c.Disable("tdd"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Disable("tdd"); err != nil {
+		t.Errorf("disable twice must be a no-op: %v", err)
+	}
+	rep, _ := c.Report(all)
+	if rep.Enabled["tdd"] {
+		t.Error("tdd should be hidden")
+	}
+	if err := c.Enable("handoff"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Enable("omp-review"); err == nil {
+		t.Error("enable must refuse when a glob pattern hides the skill")
+	}
+	rep, _ = c.Report(all)
+	if !rep.Enabled["handoff"] || rep.Enabled["omp-review"] {
+		t.Errorf("enabled %v", rep.Enabled)
+	}
+	out, _ := os.ReadFile(p)
+	got := string(out)
+	for _, want := range []string{"# keep this comment", "other: 1", "    - omp-* # trailing", "    - tdd"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("config lost %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "- handoff") {
+		t.Errorf("handoff still ignored:\n%s", got)
+	}
+
+	// no config yet: disable creates one
+	fresh := consumer.NewOmp(filepath.Join(h.Dir, "nested", "config.yml"))
+	if err := fresh.Disable("x"); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := fresh.Report(skills("x", "y"))
+	if err != nil || rep.Enabled["x"] || !rep.Enabled["y"] {
+		t.Errorf("fresh config: %v %v", rep.Enabled, err)
 	}
 }

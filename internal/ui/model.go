@@ -17,6 +17,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/jegork/skillet/internal/consumer"
 	"github.com/jegork/skillet/internal/doctor"
 	"github.com/jegork/skillet/internal/inventory"
 	"github.com/jegork/skillet/internal/readme"
@@ -45,6 +46,7 @@ type Config struct {
 	Inventory inventory.Inventory
 	Load      func() (inventory.Inventory, error)
 	Store     store.Store // nil disables sync
+	Consumers []consumer.Consumer
 }
 
 type inventoryMsg struct {
@@ -183,6 +185,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case key.Matches(msg, m.keys.Edit):
 		return m.edit()
+	case key.Matches(msg, m.keys.Toggle):
+		return m.toggle(msg.String())
 	case key.Matches(msg, m.keys.Sync):
 		return m.startSync()
 	}
@@ -370,6 +374,35 @@ func (m Model) edit() (tea.Model, tea.Cmd) {
 	}
 	c := exec.Command("sh", "-c", editor+` "$1"`, "sh", filepath.Join(it.skill.Dir, "SKILL.md"))
 	return m, tea.ExecProcess(c, func(err error) tea.Msg { return editorDoneMsg{err} })
+}
+
+// toggle flips the selected skill's visibility for the consumer whose badge
+// letter was pressed.
+func (m Model) toggle(letter string) (tea.Model, tea.Cmd) {
+	it, ok := m.list.SelectedItem().(item)
+	if !ok {
+		return m, nil
+	}
+	for _, c := range m.cfg.Consumers {
+		if !strings.EqualFold(badge(c.Name()), letter) {
+			continue
+		}
+		var err error
+		verb := "enabled"
+		if it.enabled[c.Name()] {
+			verb = "disabled"
+			err = c.Disable(it.skill.Name)
+		} else {
+			err = c.Enable(it.skill.Name)
+		}
+		if err != nil {
+			m.flash = err.Error()
+			return m, nil
+		}
+		m.flash = fmt.Sprintf("%s: %s %s", it.skill.Name, c.Name(), verb)
+		return m, m.reload()
+	}
+	return m, nil
 }
 
 func (m Model) startSync() (tea.Model, tea.Cmd) {
