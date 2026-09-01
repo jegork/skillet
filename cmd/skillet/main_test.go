@@ -100,3 +100,10 @@ func TestRunConfigSetKeepsComments(t *testing.T) {
 		}
 	}
 }
+
+// the CI runner exports XDG_CONFIG_HOME, which would point every test at the
+// same real config path instead of its temp home
+func TestMain(m *testing.M) {
+	os.Unsetenv("XDG_CONFIG_HOME")
+	os.Exit(m.Run())
+}
