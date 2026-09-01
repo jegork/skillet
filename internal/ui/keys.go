@@ -4,7 +4,7 @@ import "charm.land/bubbles/v2/key"
 
 type keyMap struct {
 	Up, Down, Filter, Edit, Sync, Doctor, Reload, Readme, Focus, Help, Quit, Back key.Binding
-	Confirm, TogglePush                                                           key.Binding
+	Confirm, TogglePush, Install                                                  key.Binding
 	Toggle, Rename                                                                key.Binding
 }
 
@@ -14,12 +14,13 @@ func newKeyMap() keyMap {
 		Down:       key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("↓/j", "down")),
 		Filter:     key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 		Edit:       key.NewBinding(key.WithKeys("e", "enter"), key.WithHelp("e", "edit")),
+		Rename:     key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "rename (own only)")),
 		Sync:       key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
+		Install:    key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "install from registry")),
 		Doctor:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "doctor")),
 		Reload:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
 		Readme:     key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "regenerate README index")),
 		Toggle:     key.NewBinding(key.WithKeys("c", "x", "o"), key.WithHelp("c/x/o", "toggle claude/codex/omp")),
-		Rename:     key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "rename (own only)")),
 		Focus:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "focus preview")),
 		Help:       key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
@@ -30,13 +31,13 @@ func newKeyMap() keyMap {
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Edit, k.Toggle, k.Sync, k.Filter, k.Doctor, k.Help, k.Quit}
+	return []key.Binding{k.Edit, k.Toggle, k.Sync, k.Install, k.Filter, k.Doctor, k.Help, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Filter, k.Focus},
-		{k.Edit, k.Toggle, k.Rename, k.Sync, k.Doctor, k.Reload, k.Readme},
+		{k.Edit, k.Toggle, k.Rename, k.Sync, k.Install, k.Doctor, k.Reload, k.Readme},
 		{k.Help, k.Back, k.Quit},
 	}
 }

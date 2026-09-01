@@ -13,6 +13,7 @@ import (
 	"github.com/jegork/skillet/internal/doctor"
 	"github.com/jegork/skillet/internal/inventory"
 	"github.com/jegork/skillet/internal/readme"
+	"github.com/jegork/skillet/internal/registry"
 	"github.com/jegork/skillet/internal/store"
 	"github.com/jegork/skillet/internal/store/chezmoi"
 	"github.com/jegork/skillet/internal/ui"
@@ -34,8 +35,7 @@ func main() {
 	fs.StringVar(&home, "home", home, "home directory to manage")
 	showVersion := fs.Bool("version", false, "print version")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [doctor|status|readme]")
-		fs.PrintDefaults()
+		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [doctor|status|readme|install]")
 	}
 	_ = fs.Parse(os.Args[1:])
 	if *showVersion {
@@ -50,6 +50,8 @@ func main() {
 		err = runStatus(home)
 	case "readme":
 		err = runReadme(home)
+	case "install":
+		err = runInstall(home, fs.Args()[1:])
 	case "":
 		err = runTUI(home)
 	default:
@@ -72,6 +74,10 @@ func runTUI(home string) error {
 		Load:      func() (inventory.Inventory, error) { return inventory.Load(home) },
 		Store:     chezmoi.New(home, roots),
 		Consumers: inventory.Consumers(home),
+		Find:      registry.Find,
+		Install: func(ctx context.Context, source, skill string) error {
+			return registry.Add(ctx, home, source, skill)
+		},
 	})
 	_, err = tea.NewProgram(m).Run()
 	return err
@@ -153,5 +159,58 @@ func runStatus(home string) error {
 	if len(st.Uncommitted) > 0 {
 		fmt.Println("  " + strings.Join(st.Uncommitted, "\n  "))
 	}
+	return nil
+}
+
+func runInstall(home string, args []string) error {
+	fs := flag.NewFlagSet("install", flag.ExitOnError)
+	name := fs.String("skill", "", "skill to install (default: every skill in the source)")
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] install <source> [--skill NAME]")
+	}
+	// flag parsing stops at the source positional, so flags after it are
+	// split out by hand
+	var source string
+	var rest []string
+	for _, a := range args {
+		if source == "" && !strings.HasPrefix(a, "-") {
+			source = a
+			continue
+		}
+		rest = append(rest, a)
+	}
+	_ = fs.Parse(rest)
+	if source == "" {
+		fs.Usage()
+		os.Exit(2)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	if err := registry.Add(ctx, home, source, *name); err != nil {
+		return err
+	}
+	inv, err := inventory.Load(home)
+	if err != nil {
+		return err
+	}
+	if *name != "" && *name != "*" {
+		for _, c := range inventory.Consumers(home) {
+			if c.Name() == "claude" {
+				if err := c.Enable(*name); err != nil {
+					return fmt.Errorf("claude stub: %w", err)
+				}
+			}
+		}
+	}
+	var installed []string
+	for _, s := range inv.Skills {
+		if s.Origin.Vendored && s.Origin.Source == source {
+			installed = append(installed, s.Name)
+		}
+	}
+	if _, err := readme.Regenerate(inv.Paths.Readme(), inv.Skills); err != nil {
+		return err
+	}
+	fmt.Printf("installed %s from %s\n", strings.Join(installed, ", "), source)
 	return nil
 }

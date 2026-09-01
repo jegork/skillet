@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -22,6 +23,7 @@ import (
 	"github.com/jegork/skillet/internal/doctor"
 	"github.com/jegork/skillet/internal/inventory"
 	"github.com/jegork/skillet/internal/readme"
+	"github.com/jegork/skillet/internal/registry"
 	"github.com/jegork/skillet/internal/rename"
 	"github.com/jegork/skillet/internal/store"
 )
@@ -36,6 +38,7 @@ const (
 	modeHelp
 	modeSync
 	modeRename
+	modeSearch
 )
 
 type pane int
@@ -50,6 +53,8 @@ type Config struct {
 	Load      func() (inventory.Inventory, error)
 	Store     store.Store // nil disables sync
 	Consumers []consumer.Consumer
+	Find      func(ctx context.Context, query string) ([]registry.Result, error) // nil disables registry search
+	Install   func(ctx context.Context, source, skill string) error
 }
 
 type inventoryMsg struct {
@@ -73,6 +78,7 @@ type Model struct {
 	mode          mode
 	focus         pane
 	sync          syncState
+	search        searchState
 
 	status        store.Status
 	statusErr     error
@@ -139,6 +145,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.reload()
 	case capturedMsg, committedMsg, pushedMsg:
 		return m.updateSync(msg)
+	case searchDoneMsg:
+		return m.searchDone(msg)
+	case installDoneMsg:
+		return m.installDone(msg)
+	case installedMsg:
+		return m.installed(msg)
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
@@ -152,6 +164,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.mode == modeRename {
 		return m.updateRename(msg)
+	}
+	if m.mode == modeSearch {
+		return m.updateSearch(msg)
 	}
 	if m.list.SettingFilter() {
 		return m.forward(msg)
@@ -201,6 +216,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.startRename()
 	case key.Matches(msg, m.keys.Sync):
 		return m.startSync()
+	case key.Matches(msg, m.keys.Install):
+		return m.startSearch()
 	}
 	return m.forward(msg)
 }
@@ -288,6 +305,7 @@ func (m *Model) resize() {
 	m.sync.diff.SetHeight(max(m.height-4, 1))
 	m.sync.msg.SetWidth(max(m.width-12, 10))
 	m.renameInput.SetWidth(max(m.width-14, 10))
+	m.search.input.SetWidth(max(m.width-14, 10))
 	m.help.SetWidth(m.preview.Width())
 	m.refreshPreview()
 }
@@ -559,6 +577,9 @@ func (m Model) render() string {
 	}
 	if m.mode == modeSync {
 		return m.renderSync()
+	}
+	if m.mode == modeSearch {
+		return m.renderSearch()
 	}
 	listView := m.dg.header(m.list.Width()) + "\n" + strings.TrimRight(m.list.View(), "\n")
 	body := listView

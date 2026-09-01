@@ -23,7 +23,8 @@ skillet               # the TUI
 skillet doctor        # findings as text, exit 1 on errors
 skillet status        # store drift: uncaptured, uncommitted, ahead
 skillet readme        # regenerate the README index
-```
+skillet install owner/repo [--skill NAME]
+                      # install from skills.sh via pnpx skills
 
 | key | action |
 |---|---|
@@ -35,8 +36,7 @@ skillet readme        # regenerate the README index
 | `s` | capture into the store, review the diff, commit, push |
 | `d` | doctor report |
 | `R` | regenerate the README index, keeping its hand-made sections |
-| `r` | rescan |
-| `tab` | scroll the preview |
+| `i` | search skills.sh, `enter` installs the picked skill via `pnpx skills` |
 | `?` | help |
 | `q` | quit |
 
@@ -63,6 +63,7 @@ internal/rename     rename an own skill and fix everything that pointed at it
 internal/store      Store interface: Status / Capture / Diff / Commit / Push
 internal/store/chezmoi
 internal/ui         bubbletea front end
+internal/registry   search skills.sh and install through pnpx skills
 ```
 
 The chezmoi store only ever adds children of a tracked root, never the root
@@ -70,7 +71,6 @@ directory itself: on chezmoi 2.72 re-adding a directory drops its `exact_`
 attribute.
 
 ## Develop
-
 ```sh
 make test             # chezmoi integration tests run when chezmoi is on PATH
 make lint
