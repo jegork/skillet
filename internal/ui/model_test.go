@@ -84,11 +84,11 @@ func TestListRendersSkillsAndStatus(t *testing.T) {
 			t.Errorf("view missing %q:\n%s", want, out)
 		}
 	}
-	// the dir path may wrap anywhere in the preview, so compare without
-	// whitespace or styling
-	joined := strings.NewReplacer("\n", "", " ", "").Replace(ansi.Strip(out))
-	if want := filepath.Join(".agents", "skills", "alpha"); !strings.Contains(joined, want) {
-		t.Errorf("preview missing dir %q:\n%s", want, out)
+	// the dir path may wrap anywhere inside the preview pane, so check the
+	// pane's own content without whitespace or styling
+	preview := strings.NewReplacer("\n", "", " ", "").Replace(ansi.Strip(m.preview.GetContent()))
+	if want := filepath.Join(".agents", "skills", "alpha"); !strings.Contains(preview, want) {
+		t.Errorf("preview missing dir %q:\n%s", want, m.preview.GetContent())
 	}
 	lines := strings.Split(out, "\n")
 	if len(lines) != 40 {
