@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/jegork/skillet/internal/registry"
 	"github.com/jegork/skillet/internal/store"
 	"github.com/jegork/skillet/internal/store/chezmoi"
+	"github.com/jegork/skillet/internal/store/gitrepo"
 	"github.com/jegork/skillet/internal/ui"
 )
 
@@ -33,27 +35,35 @@ func main() {
 	home, _ := os.UserHomeDir()
 	fs := flag.NewFlagSet("skillet", flag.ExitOnError)
 	fs.StringVar(&home, "home", home, "home directory to manage")
+	storeName := fs.String("store", "chezmoi", "store backend: chezmoi or git")
 	showVersion := fs.Bool("version", false, "print version")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [doctor|status|readme|install]")
+		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [--store chezmoi|git] [doctor|status|readme|install|store init]")
+		fs.PrintDefaults()
 	}
 	_ = fs.Parse(os.Args[1:])
 	if *showVersion {
 		fmt.Println("skillet", version)
 		return
 	}
+	if *storeName != "chezmoi" && *storeName != "git" {
+		fmt.Fprintln(os.Stderr, "skillet: unknown --store", *storeName, "(want chezmoi or git)")
+		os.Exit(2)
+	}
 	var err error
 	switch fs.Arg(0) {
 	case "doctor":
 		err = runDoctor(home)
 	case "status":
-		err = runStatus(home)
+		err = runStatus(home, newStore(*storeName, home, ""))
 	case "readme":
 		err = runReadme(home)
 	case "install":
 		err = runInstall(home, fs.Args()[1:])
+	case "store":
+		err = runStore(home, fs.Args()[1:])
 	case "":
-		err = runTUI(home)
+		err = runTUI(home, newStore(*storeName, home, ""))
 	default:
 		fs.Usage()
 		os.Exit(2)
@@ -64,7 +74,19 @@ func main() {
 	}
 }
 
-func runTUI(home string) error {
+// newStore builds the selected backend; gitDir empty means the default
+// ~/.agents/.skillet-store.git.
+func newStore(name, home, gitDir string) store.Store {
+	if name == "git" {
+		if gitDir == "" {
+			gitDir = filepath.Join(home, ".agents", ".skillet-store.git")
+		}
+		return gitrepo.New(home, gitDir, roots)
+	}
+	return chezmoi.New(home, roots)
+}
+
+func runTUI(home string, st store.Store) error {
 	inv, err := inventory.Load(home)
 	if err != nil {
 		return err
@@ -72,7 +94,7 @@ func runTUI(home string) error {
 	m := ui.New(ui.Config{
 		Inventory: inv,
 		Load:      func() (inventory.Inventory, error) { return inventory.Load(home) },
-		Store:     chezmoi.New(home, roots),
+		Store:     st,
 		Consumers: inventory.Consumers(home),
 		Find:      registry.Find,
 		Install: func(ctx context.Context, source, skill string) error {
@@ -139,25 +161,25 @@ func runReadme(home string) error {
 	return nil
 }
 
-func runStatus(home string) error {
+func runStatus(home string, st store.Store) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	st, err := chezmoi.New(home, roots).Status(ctx)
+	status, err := st.Status(ctx)
 	if err != nil {
 		return err
 	}
 	ahead := "no upstream"
-	if st.Ahead >= 0 {
-		ahead = fmt.Sprintf("+%d", st.Ahead)
+	if status.Ahead >= 0 {
+		ahead = fmt.Sprintf("+%d", status.Ahead)
 	}
-	fmt.Printf("branch %s (%s)\n", st.Branch, ahead)
-	fmt.Printf("uncaptured: %d\n", len(st.Uncaptured))
-	for _, c := range st.Uncaptured {
+	fmt.Printf("branch %s (%s)\n", status.Branch, ahead)
+	fmt.Printf("uncaptured: %d\n", len(status.Uncaptured))
+	for _, c := range status.Uncaptured {
 		fmt.Printf("  %s %s\n", c.Kind, c.Path)
 	}
-	fmt.Printf("uncommitted: %d\n", len(st.Uncommitted))
-	if len(st.Uncommitted) > 0 {
-		fmt.Println("  " + strings.Join(st.Uncommitted, "\n  "))
+	fmt.Printf("uncommitted: %d\n", len(status.Uncommitted))
+	if len(status.Uncommitted) > 0 {
+		fmt.Println("  " + strings.Join(status.Uncommitted, "\n  "))
 	}
 	return nil
 }
@@ -212,5 +234,22 @@ func runInstall(home string, args []string) error {
 		return err
 	}
 	fmt.Printf("installed %s from %s\n", strings.Join(installed, ", "), source)
+func runStore(home string, args []string) error {
+	if len(args) == 0 || args[0] != "init" {
+		fmt.Fprintln(os.Stderr, "usage: skillet store init [--git-dir DIR] [--remote URL]")
+		os.Exit(2)
+	}
+	fs := flag.NewFlagSet("skillet store init", flag.ExitOnError)
+	gitDir := fs.String("git-dir", "", "git dir for the store repo (default ~/.agents/.skillet-store.git)")
+	remote := fs.String("remote", "", "origin remote to add")
+	_ = fs.Parse(args[1:])
+	dir := *gitDir
+	if dir == "" {
+		dir = filepath.Join(home, ".agents", ".skillet-store.git")
+	}
+	if err := gitrepo.Init(home, dir, *remote); err != nil {
+		return err
+	}
+	fmt.Printf("git store initialized at %s\n", dir)
 	return nil
 }

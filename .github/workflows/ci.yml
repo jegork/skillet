@@ -16,7 +16,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - uses: go-task/setup-task@v1
       - name: install chezmoi
         run: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b /usr/local/bin
-      - run: make lint
-      - run: make test
+      - run: task lint
+      - run: task test

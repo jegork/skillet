@@ -2,6 +2,7 @@ package doctor_test
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jegork/skillet/internal/consumer"
@@ -176,4 +177,18 @@ func TestDriftAgainstLockHash(t *testing.T) {
 	})
 
 	expect(t, run(t, h), key{"drift", "changed", doctor.Info})
+}
+
+func TestProvenanceMarkers(t *testing.T) {
+	h := testhome.New(t)
+	h.RawSkill("untracked", "---\nname: untracked\ndescription: U\nlicense: MIT\nmetadata:\n  author: vercel\n---\n")
+	h.RawSkill("tracked", "---\nname: tracked\ndescription: T\nlicense: MIT\n---\n")
+	h.Skill("mine", "M")
+	h.Lock(map[string]string{"tracked": "acme/skills"})
+	h.Readme("| `untracked` | own | U |", "| `tracked` | vendored (acme/skills) | T |", "| `mine` | own | M |")
+
+	got := expect(t, run(t, h), key{"provenance", "untracked", doctor.Warn})
+	if msg := got[key{"provenance", "untracked", doctor.Warn}]; !strings.Contains(msg, "author vercel") || !strings.Contains(msg, "license MIT") {
+		t.Errorf("message %q", msg)
+	}
 }

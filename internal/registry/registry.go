@@ -84,7 +84,9 @@ func Add(ctx context.Context, home, source, name string) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, addTimeout)
 	defer cancel()
-	args := []string{"skills", "add", source, "--skill", name, "-g", "-y"}
+	// universal is the agent id that writes the canonical copy into
+	// ~/.agents/skills; per-agent ids copy into that agent's own dir instead
+	args := []string{"skills", "add", source, "--skill", name, "-a", "universal", "-g", "-y"}
 	cmd := exec.CommandContext(ctx, "pnpx", args...)
 	cmd.Dir = home
 	// the CLI picks the global scope from $HOME

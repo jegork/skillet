@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"errors"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -205,5 +207,95 @@ func TestRenameFlow(t *testing.T) {
 	m = press(m, "k", "n", "esc")
 	if m.mode != modeList {
 		t.Errorf("esc should cancel rename, mode %v", m.mode)
+	}
+}
+
+func TestRefineRefusesVendored(t *testing.T) {
+	m := newTestModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = press(next.(Model), "j", "j", "p")
+	if m.mode != modeList || !strings.Contains(m.flash, "refine disabled") {
+		t.Errorf("vendored refine: mode %v flash %q", m.mode, m.flash)
+	}
+}
+
+func TestRefineAgentPicker(t *testing.T) {
+	orig := lookPath
+	t.Cleanup(func() { lookPath = orig })
+	lookPath = func(name string) (string, error) {
+		if name == "claude" || name == "omp" {
+			return "/bin/" + name, nil
+		}
+		return "", exec.ErrNotFound
+	}
+	m := newTestModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = press(next.(Model), "p")
+	if m.mode != modeRefine {
+		t.Fatalf("mode %v, want refine picker", m.mode)
+	}
+	if line := m.flashLine(); !strings.Contains(line, "1 claude") || !strings.Contains(line, "2 omp") || strings.Contains(line, "codex") {
+		t.Errorf("picker should offer only agents on PATH: %q", line)
+	}
+	m = press(m, "esc")
+	if m.mode != modeList {
+		t.Errorf("esc should cancel picker, mode %v", m.mode)
+	}
+}
+
+func TestRefineRunsOnPick(t *testing.T) {
+	orig := lookPath
+	t.Cleanup(func() { lookPath = orig })
+	lookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+	m := newTestModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = press(next.(Model), "p")
+	if m.mode != modeList || !strings.Contains(m.flash, "no agent") {
+		t.Errorf("no agents on PATH: mode %v flash %q", m.mode, m.flash)
+	}
+}
+
+func TestRefineDoneReloads(t *testing.T) {
+	m := newTestModel(t)
+	m = apply(m, refineDoneMsg{errors.New("exit status 1")})
+	if !strings.Contains(m.flash, "refine: exit status 1") {
+		t.Errorf("flash %q, want refine error", m.flash)
+	}
+}
+
+func TestRefineCommand(t *testing.T) {
+	dir := "/home/u/.agents/skills/alpha"
+	for _, agent := range []string{"claude", "omp", "codex"} {
+		c := refineCmd(agent, dir)
+		if c.Dir != dir {
+			t.Errorf("%s: Dir %q, want %q", agent, c.Dir, dir)
+		}
+		if c.Args[0] != agent {
+			t.Errorf("%s: Args[0] %q", agent, c.Args[0])
+		}
+		if len(c.Args) != 2 {
+			t.Fatalf("%s: args %v, want agent + prompt", agent, c.Args)
+		}
+		want := "Refine the skill at " + filepath.Join(dir, "SKILL.md") +
+			". Read it fully first, then tighten the description trigger line, " +
+			"fix unclear steps, and keep frontmatter valid. Do not rename the skill."
+		if c.Args[1] != want {
+			t.Errorf("%s: prompt %q, want %q", agent, c.Args[1], want)
+		}
+	}
+}
+
+func TestQuitKey(t *testing.T) {
+	m := newTestModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = next.(Model)
+	for _, k := range []tea.KeyPressMsg{{Code: 'q', Text: "q"}, {Code: 'c', Mod: tea.ModCtrl}} {
+		_, cmd := m.Update(k)
+		if cmd == nil {
+			t.Fatalf("%s: no command returned", k)
+		}
+		if _, ok := cmd().(tea.QuitMsg); !ok {
+			t.Errorf("%s: expected tea.QuitMsg", k)
+		}
 	}
 }
