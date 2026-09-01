@@ -51,6 +51,32 @@ func press(m Model, keys ...string) Model {
 	return m
 }
 
+func TestEditConfigKey(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.ConfigPath = ""
+	next, cmd := m.Update(tea.KeyPressMsg{Code: 'E', Text: "E"})
+	m = next.(Model)
+	if cmd != nil {
+		t.Error("missing config path must not launch an editor")
+	}
+	if !strings.Contains(m.flash, "no file") {
+		t.Errorf("flash %q", m.flash)
+	}
+}
+
+func TestEditConfigLaunchesEditor(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.ConfigPath = filepath.Join(t.TempDir(), "config.yml")
+	next, cmd := m.Update(tea.KeyPressMsg{Code: 'E', Text: "E"})
+	if cmd == nil {
+		t.Fatal("edit config must launch an editor")
+	}
+	if m.flash != "" {
+		t.Errorf("flash %q", m.flash)
+	}
+	_ = next
+}
+
 // apply runs Update and feeds back the data messages produced by returned
 // commands. Cursor blink ticks are dropped: they would loop forever.
 func apply(m Model, msg tea.Msg) Model {
