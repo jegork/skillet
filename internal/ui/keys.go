@@ -18,6 +18,7 @@ func newKeyMap() keyMap {
 		Sync:       key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
 		Doctor:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "doctor")),
 		Reload:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
+		Readme:     key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "regenerate README index")),
 		Config:     key.NewBinding(key.WithKeys("E"), key.WithHelp("E", "edit config")),
 		Toggle:     key.NewBinding(key.WithKeys("c", "x", "o"), key.WithHelp("c/x/o", "toggle claude/codex/omp")),
 		Rename:     key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "rename (own only)")),

@@ -64,8 +64,11 @@ skillet config edit
 | `j` `k` | move |
 | `/` | filter by name, `esc` clears |
 | `t` | toggle between the flat list and the tree grouped by origin |
+| `←` `→` | collapse / expand a group (also `enter` / `space` on a group row) |
 | `e` `enter` | open `SKILL.md` in `$VISUAL` / `$EDITOR` (own skills only) |
 | `E` | open the config file in `$VISUAL` / `$EDITOR` |
+| `c` `x` `o` | toggle visibility for claude / codex / omp |
+| `n` | rename (own only): dir, frontmatter, cross-references, stubs, README row |
 | `s` | capture into the store, review the diff, commit, push |
 | `d` | doctor report |
 | `R` | regenerate the README index, keeping its hand-made sections |
@@ -97,6 +100,7 @@ internal/skill      scan skills + lock file
 internal/consumer   which tool sees which skill (symlink dirs, omp ignore globs)
 internal/doctor     dangling stubs, unknown cross-references, stale README, lock orphans, drift
 internal/readme     README index parse and regeneration
+internal/rename     rename an own skill and fix everything that pointed at it
 internal/config     read/write ~/.config/skillet/config.yml, comments intact
 internal/store      Store interface: Status / Capture / Diff / Commit / Push
 internal/store/chezmoi
