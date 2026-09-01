@@ -193,6 +193,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	switch {
+	case key.Matches(msg, m.keys.Quit):
+		return m, tea.Quit
 	case key.Matches(msg, m.keys.Back):
 		if m.mode != modeList {
 			m.mode = modeList

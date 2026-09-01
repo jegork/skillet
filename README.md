@@ -28,6 +28,7 @@ skillet readme        # regenerate the README index
 | key | action |
 |---|---|
 | `j` `k` | move |
+| `/` | filter by name, `esc` clears |
 | `t` | toggle between the flat list and the tree grouped by origin |
 | `←` `→` | collapse / expand a group (also `enter` / `space` on a group row) |
 | `e` `enter` | open `SKILL.md` in `$VISUAL` / `$EDITOR` (own skills only) |
