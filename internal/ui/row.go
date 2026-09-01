@@ -46,6 +46,7 @@ type delegate struct {
 	styles    styles
 	consumers []string
 	now       func() time.Time
+	expanded  func(string) bool // nil in flat mode: no group rows to render
 }
 
 func (d delegate) Height() int                         { return 1 }
@@ -53,11 +54,34 @@ func (d delegate) Spacing() int                        { return 0 }
 func (d delegate) Update(tea.Msg, *list.Model) tea.Cmd { return nil }
 
 func (d delegate) Render(w io.Writer, m list.Model, index int, li list.Item) {
+	c := layout(m.Width(), len(d.consumers))
+	if g, ok := li.(groupItem); ok {
+		fmt.Fprint(w, d.groupRow(g, index == m.Index()))
+		return
+	}
 	it, ok := li.(item)
 	if !ok {
 		return
 	}
-	fmt.Fprint(w, d.row(it, layout(m.Width(), len(d.consumers)), index == m.Index()))
+	fmt.Fprint(w, d.row(it, c, index == m.Index()))
+}
+
+func (d delegate) groupRow(g groupItem, selected bool) string {
+	marker, name := "▸", "own"
+	if g.key != "own" {
+		name = "vend " + g.key
+	}
+	if d.expanded != nil && d.expanded(g.key) {
+		marker = "▾"
+	}
+	cursor, style := "  ", d.styles.accent
+	if selected {
+		cursor = d.styles.selected.Render("> ")
+		style = d.styles.selected
+	} else if g.key != "own" {
+		style = d.styles.vendored
+	}
+	return cursor + style.Render(marker+" "+name) + d.styles.faint.Render(fmt.Sprintf(" (%d)", len(g.children)))
 }
 
 func (d delegate) header(width int) string {

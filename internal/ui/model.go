@@ -23,6 +23,7 @@ import (
 	"github.com/jegork/skillet/internal/inventory"
 	"github.com/jegork/skillet/internal/readme"
 	"github.com/jegork/skillet/internal/rename"
+	"github.com/jegork/skillet/internal/skill"
 	"github.com/jegork/skillet/internal/store"
 )
 
@@ -81,12 +82,16 @@ type Model struct {
 	lastSelected  string
 	renameInput   textinput.Model
 	selectNext    string // skill to select after the next reload
+	selectGroup   string // group to select after the next rebuild
+	tree          bool   // group skills by origin instead of a flat list
+	collapsed     map[string]bool
 }
 
 func New(cfg Config) Model {
-	m := Model{cfg: cfg, inv: cfg.Inventory, styles: newStyles(true), keys: newKeyMap()}
-	m.dg = delegate{styles: m.styles, consumers: m.inv.Consumers, now: time.Now}
+	m := Model{cfg: cfg, inv: cfg.Inventory, styles: newStyles(true), keys: newKeyMap(), collapsed: map[string]bool{}}
+	m.dg = delegate{styles: m.styles, consumers: m.inv.Consumers, now: time.Now, expanded: m.groupExpanded}
 	m.list = list.New(nil, m.dg, 0, 0)
+	m.list.Filter = treeFilter
 	m.list.SetShowTitle(false)
 	m.list.SetShowStatusBar(false)
 	m.list.SetShowPagination(false)
@@ -126,8 +131,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.flash = "reload failed: " + msg.err.Error()
 			return m, nil
 		}
-		m.setInventory(msg.inv)
-		return m, nil
+		cmd := m.setInventory(msg.inv)
+		return m, cmd
 	case statusMsg:
 		m.statusPending = false
 		m.status, m.statusErr = msg.status, msg.err
@@ -156,6 +161,37 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.list.SettingFilter() {
 		return m.forward(msg)
 	}
+	if m.tree && m.mode == modeList && m.focus == paneList {
+		if _, ok := m.list.SelectedItem().(groupItem); ok {
+			switch {
+			case key.Matches(msg, m.keys.Confirm) || msg.String() == "space":
+				g := m.list.SelectedItem().(groupItem)
+				if m.collapsed[g.key] {
+					delete(m.collapsed, g.key)
+				} else {
+					m.collapsed[g.key] = true
+				}
+				return m, m.rebuildItems()
+			case key.Matches(msg, m.keys.Collapse):
+				g := m.list.SelectedItem().(groupItem)
+				m.collapsed[g.key] = true
+				return m, m.rebuildItems()
+			case key.Matches(msg, m.keys.Expand):
+				g := m.list.SelectedItem().(groupItem)
+				delete(m.collapsed, g.key)
+				return m, m.rebuildItems()
+			}
+		}
+		switch {
+		case key.Matches(msg, m.keys.Collapse):
+			// on a skill row, left collapses the group that owns it
+			if it, ok := m.list.SelectedItem().(item); ok {
+				m.collapsed[owningGroup(it.skill)] = true
+				m.selectGroup = owningGroup(it.skill)
+				return m, m.rebuildItems()
+			}
+		}
+	}
 	switch {
 	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit
@@ -167,7 +203,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if m.list.IsFiltered() {
 			m.list.ResetFilter()
-			return m, nil
+			return m, m.rebuildItems()
 		}
 		return m, nil
 	case key.Matches(msg, m.keys.Help):
@@ -186,6 +222,20 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.flash = fmt.Sprintf("README index regenerated: +%d -%d", res.Added, res.Removed)
 		return m, m.reload()
+	case key.Matches(msg, m.keys.Filter):
+		if !m.tree {
+			return m.forward(msg)
+		}
+		// collapsed children must be matchable, so briefly expand everything
+		saved := m.collapsed
+		m.collapsed = map[string]bool{}
+		cmd := m.rebuildItems()
+		m.collapsed = saved
+		next, fcmd := m.forward(msg)
+		return next, tea.Batch(cmd, fcmd)
+	case key.Matches(msg, m.keys.Tree):
+		m.tree = !m.tree
+		return m, m.rebuildItems()
 	case key.Matches(msg, m.keys.Focus):
 		if m.focus == paneList {
 			m.focus = panePreview
@@ -240,39 +290,105 @@ func (m Model) reload() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m *Model) setInventory(inv inventory.Inventory) {
+func (m *Model) setInventory(inv inventory.Inventory) tea.Cmd {
 	m.inv = inv
+	return m.rebuildItems()
+}
+
+// rebuildItems regenerates the list from m.inv, honouring tree mode and
+// collapsed groups, and restores the selection across the rebuild.
+func (m *Model) rebuildItems() tea.Cmd {
 	selected := m.selectNext
 	m.selectNext = ""
-	if it, ok := m.list.SelectedItem().(item); ok && selected == "" {
-		selected = it.skill.Name
-	}
-	bySkill := doctor.BySkill(inv.Findings)
-	items := make([]list.Item, 0, len(inv.Skills))
-	index := 0
-	for i, s := range inv.Skills {
-		enabled := map[string]bool{}
-		for name, rep := range inv.Reports {
-			enabled[name] = rep.Enabled[s.Name]
-		}
-		items = append(items, item{skill: s, enabled: enabled, findings: bySkill[s.Name]})
-		if s.Name == selected {
-			index = i
+	if selected == "" {
+		switch sel := m.list.SelectedItem().(type) {
+		case item:
+			selected = sel.skill.Name
+		case groupItem:
+			selected = groupMarker + sel.key
 		}
 	}
-	m.list.SetItems(items)
+	bySkill := doctor.BySkill(m.inv.Findings)
+	var items []list.Item
+	if !m.tree {
+		for _, s := range m.inv.Skills {
+			items = append(items, m.makeItem(s, bySkill))
+		}
+	} else {
+		for _, g := range groupSkills(m.inv.Skills) {
+			items = append(items, groupItem{key: g.key, children: childNames(g.skills)})
+			// collapsed children stay in the list while a filter is active
+			if !m.collapsed[g.key] || m.list.SettingFilter() || m.list.IsFiltered() {
+				for _, s := range g.skills {
+					items = append(items, m.makeItem(s, bySkill))
+				}
+			}
+		}
+	}
+	cmd := m.list.SetItems(items)
 	if !m.list.IsFiltered() {
-		m.list.Select(index)
+		if m.selectGroup != "" {
+			for i, li := range items {
+				if g, ok := li.(groupItem); ok && g.key == m.selectGroup {
+					m.list.Select(i)
+					break
+				}
+			}
+		} else {
+			for i, li := range items {
+				switch sel := li.(type) {
+				case item:
+					if sel.skill.Name == selected {
+						m.list.Select(i)
+					}
+				case groupItem:
+					if groupMarker+sel.key == selected {
+						m.list.Select(i)
+					}
+				}
+			}
+		}
 	}
+	m.selectGroup = ""
 	m.refreshPreview()
+	return cmd
+}
+
+func (m *Model) makeItem(s skill.Skill, bySkill map[string][]doctor.Finding) item {
+	enabled := map[string]bool{}
+	for name, rep := range m.inv.Reports {
+		enabled[name] = rep.Enabled[s.Name]
+	}
+	return item{skill: s, enabled: enabled, findings: bySkill[s.Name]}
+}
+
+func childNames(skills []skill.Skill) []string {
+	names := make([]string, len(skills))
+	for i, s := range skills {
+		names[i] = s.Name
+	}
+	return names
+}
+
+func owningGroup(s skill.Skill) string {
+	if s.Origin.Vendored {
+		return s.Origin.Source
+	}
+	return "own"
 }
 
 func (m Model) selectedName() string {
-	if it, ok := m.list.SelectedItem().(item); ok {
-		return it.skill.Name
+	switch sel := m.list.SelectedItem().(type) {
+	case item:
+		return sel.skill.Name
+	case groupItem:
+		return groupMarker + sel.key
 	}
 	return ""
 }
+
+// groupExpanded answers the delegate's collapse marker.
+func (m Model) groupExpanded(key string) bool { return !m.collapsed[key] }
 
 func (m *Model) resize() {
 	listW := m.width * 55 / 100
@@ -300,14 +416,29 @@ func (m *Model) refreshPreview() {
 	case modeDoctor:
 		m.preview.SetContent(m.doctorReport())
 	default:
-		it, ok := m.list.SelectedItem().(item)
-		if !ok {
+		switch sel := m.list.SelectedItem().(type) {
+		case item:
+			m.preview.SetContent(m.wrap(m.skillPreview(sel)))
+		case groupItem:
+			m.preview.SetContent(m.wrap(m.groupPreview(sel)))
+		default:
 			m.preview.SetContent(m.styles.faint.Render("no skill selected"))
-			break
 		}
-		m.preview.SetContent(m.wrap(m.skillPreview(it)))
 	}
 	m.preview.GotoTop()
+}
+
+func (m Model) groupPreview(g groupItem) string {
+	s := m.styles
+	var b strings.Builder
+	b.WriteString(s.title.Render(g.key) + "\n")
+	if g.key == "own" {
+		b.WriteString(s.faint.Render("your own skills") + "\n")
+	} else {
+		b.WriteString(s.faint.Render("vendored from "+g.key) + "\n")
+	}
+	b.WriteString(fmt.Sprintf("%d skills: %s", len(g.children), strings.Join(g.children, ", ")))
+	return b.String()
 }
 
 // wrap word-wraps prose to the preview width; the viewport itself only
@@ -638,7 +769,7 @@ func (m Model) statusBar() string {
 		dr = fmt.Sprintf("%s %s", s.warn.Render(fmt.Sprintf("%d warn", warn)), s.err.Render(fmt.Sprintf("%d err", errs)))
 	}
 	parts = append(parts, "doctor: "+dr)
-	parts = append(parts, fmt.Sprintf("%d/%d", len(m.list.VisibleItems()), len(m.inv.Skills)))
+	parts = append(parts, fmt.Sprintf("%d/%d", visibleSkills(m.list), len(m.inv.Skills)))
 	parts = append(parts, m.help.ShortHelpView(m.keys.ShortHelp()))
 	return s.statusBar.MaxWidth(max(m.width, 1)).Render(strings.Join(parts, "  │  "))
 }

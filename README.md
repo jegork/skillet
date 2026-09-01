@@ -29,6 +29,8 @@ skillet readme        # regenerate the README index
 |---|---|
 | `j` `k` | move |
 | `/` | filter by name, `esc` clears |
+| `t` | toggle between the flat list and the tree grouped by origin |
+| `←` `→` | collapse / expand a group (also `enter` / `space` on a group row) |
 | `e` `enter` | open `SKILL.md` in `$VISUAL` / `$EDITOR` (own skills only) |
 | `c` `x` `o` | toggle visibility for claude / codex / omp |
 | `n` | rename (own only): dir, frontmatter, cross-references, stubs, README row |
@@ -42,6 +44,10 @@ skillet readme        # regenerate the README index
 
 In the sync review: `enter` commits, `ctrl+p` toggles push, `esc` cancels and
 leaves the capture staged.
+
+`t` switches the list to a tree: your own skills first, then one collapsible
+group per vendored `owner/repo`, groups and children sorted by name. Filtering
+keeps working and hides groups without matches.
 
 Columns: origin (`own` or `vend owner/repo` from `~/.agents/.skill-lock.json`),
 consumer badges (`C` claude, `X` codex, `O` omp), doctor finding count, last
