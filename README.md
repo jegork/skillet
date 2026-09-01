@@ -4,8 +4,8 @@ Terminal UI for the agent skills in `~/.agents/skills`: what you have, which
 tool sees it, what is yours versus vendored, what drifted, and one key to sync
 it all into your dotfiles.
 
-Skills are edited in place. The store (chezmoi today) is captured from `$HOME`,
-never edited directly.
+Skills are edited in place. The store is captured from `$HOME`, never edited
+directly. Two backends: `chezmoi` (default) or `git`.
 
 ## Install
 
@@ -18,12 +18,16 @@ writes the changelog, and GoReleaser attaches darwin/linux binaries.
 
 ## Use
 
-```sh
 skillet               # the TUI
 skillet doctor        # findings as text, exit 1 on errors
 skillet status        # store drift: uncaptured, uncommitted, ahead
 skillet readme        # regenerate the README index
+skillet store init    # create the git store repo (--git-dir, --remote)
 ```
+
+`--store git` selects the plain git backend: a repo whose worktree is `$HOME`
+with its git dir at `~/.agents/.skillet-store.git`, tracking only the store
+roots. Create it once with `skillet store init [--git-dir DIR] [--remote URL]`.
 
 | key | action |
 |---|---|
@@ -62,12 +66,18 @@ internal/readme     README index parse and regeneration
 internal/rename     rename an own skill and fix everything that pointed at it
 internal/store      Store interface: Status / Capture / Diff / Commit / Push
 internal/store/chezmoi
+internal/store/gitrepo
 internal/ui         bubbletea front end
 ```
 
 The chezmoi store only ever adds children of a tracked root, never the root
 directory itself: on chezmoi 2.72 re-adding a directory drops its `exact_`
 attribute.
+
+The git store's git dir may live inside `$HOME` (the default is
+`~/.agents/.skillet-store.git`): it sits outside the tracked roots, and every
+git operation is pathspec-scoped to those roots, so nothing else in `$HOME` is
+ever staged, diffed, committed or pushed.
 
 ## Develop
 
