@@ -21,6 +21,7 @@ func newKeyMap() keyMap {
 		Install:    key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "install from registry")),
 		Doctor:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "doctor")),
 		Reload:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
+		Readme:     key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "regenerate README index")),
 		Config:     key.NewBinding(key.WithKeys("E"), key.WithHelp("E", "edit config")),
 		Refine:     key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "refine (own only)")),
 		Upstream:   key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "check upstream")),

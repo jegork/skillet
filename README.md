@@ -70,7 +70,7 @@ skillet config edit
 | `←` `→` | collapse / expand a group (also `enter` / `space` on a group row) |
 | `e` `enter` | open `SKILL.md` in `$VISUAL` / `$EDITOR` (own skills only) |
 | `E` | open the config file in `$VISUAL` / `$EDITOR` |
-| `d` | doctor report |
+| `c` `x` `o` | toggle visibility for claude / codex / omp |
 | `u` | check upstream: fetch the repos in the lock and mark outdated skills |
 | `U` | update the picked vendored skill with `pnpx skills update` (outdated only) |
 | `n` | rename (own only): dir, frontmatter, cross-references, stubs, README row |
