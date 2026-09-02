@@ -72,6 +72,7 @@ skillet config edit
 | `c` `x` `o` | toggle visibility for claude / codex / omp |
 | `n` | rename (own only): dir, frontmatter, cross-references, stubs, README row |
 | `p` | refine (own only): pick claude / omp / codex and launch it on the skill with a prefilled message |
+| `m` | move between scopes: global or one of the discovered projects |
 | `s` | capture into the store, review the diff, commit, push |
 | `d` | doctor report |
 | `R` | regenerate the README index, keeping its hand-made sections |
@@ -94,10 +95,15 @@ skillet probes each project's `.agents/skills`, `.claude/skills`,
 (`.agents/skills` canonical with `.claude/skills` stubs) toggling works as at
 home; a bare `.claude/skills` dir with real skill folders is shown but its
 visibility cannot be toggled. Project skills appear in the flat list with an
-`@project` origin marker. Doctor flags project skills shadowing a global
-skill of the same name, broken project stubs, project lock entries without a
-folder, and a skills dir whose content hash differs from the project lock's
-`computedHash`. Sync stays global-only for now.
+`@project` origin marker. `m` moves a skill between global and a project in
+both directions: the dir is relocated, stubs are fixed per consumer, a
+vendored skill takes its lock entry along (tree hash at home, computedHash in
+the project), and the README row follows. Moves that would clash with an
+existing name or shadow a global skill are refused. Doctor flags project
+skills shadowing a global skill of the same name, broken project stubs,
+project lock entries without a folder, and a skills dir whose content hash
+differs from the project lock's `computedHash`. Sync stays global-only for
+now.
 
 Columns: origin (`own` or `vend owner/repo` from `~/.agents/.skill-lock.json`,
 project skills suffixed ` @project`), consumer badges (`C` claude, `X` codex,
@@ -114,6 +120,7 @@ lock orphans and project skills dir drift against `computedHash`.
 
 ```
 internal/skill      scan skills + lock files
+internal/move        move a skill between global and a project scope, fix stubs/locks/README
 internal/project    project discovery from projects.roots/paths
 internal/consumer   which tool sees which skill (symlink dirs, omp ignore globs)
 internal/doctor     dangling stubs, unknown cross-references, stale README, lock orphans, drift

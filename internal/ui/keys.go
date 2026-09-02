@@ -5,7 +5,7 @@ import "charm.land/bubbles/v2/key"
 type keyMap struct {
 	Up, Down, Filter, Edit, Refine, Sync, Doctor, Reload, Readme, Focus, Help, Quit, Back key.Binding
 	Confirm, TogglePush, Install, Config                                                  key.Binding
-	Toggle, Rename                                                                        key.Binding
+	Toggle, Rename, Move                                                                  key.Binding
 	Tree, Collapse, Expand                                                                key.Binding
 }
 
@@ -17,6 +17,7 @@ func newKeyMap() keyMap {
 		Edit:       key.NewBinding(key.WithKeys("e", "enter"), key.WithHelp("e", "edit")),
 		Rename:     key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "rename (own only)")),
 		Sync:       key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
+		Move:       key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "move between scopes")),
 		Install:    key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "install from registry")),
 		Doctor:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "doctor")),
 		Reload:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
@@ -43,7 +44,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Filter, k.Tree, k.Focus},
-		{k.Edit, k.Refine, k.Toggle, k.Rename, k.Sync, k.Install, k.Doctor, k.Reload, k.Readme},
+		{k.Edit, k.Refine, k.Toggle, k.Rename, k.Move, k.Sync, k.Install, k.Doctor, k.Reload, k.Readme},
 		{k.Help, k.Back, k.Quit},
 	}
 }

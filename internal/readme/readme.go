@@ -160,3 +160,40 @@ func Rename(path, oldName, newName string) error {
 	}
 	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
 }
+
+// Drop removes a skill's row. A missing README is fine.
+func Drop(path, name string) error {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var out []string
+	removed := false
+	for _, line := range strings.Split(string(b), "\n") {
+		if m := rowRe.FindStringSubmatch(line); m != nil && m[1] == name {
+			removed = true
+			continue
+		}
+		out = append(out, line)
+	}
+	if !removed {
+		return nil
+	}
+	return os.WriteFile(path, []byte(strings.Join(out, "\n")), 0o644)
+}
+
+// Add appends the skill's row under Uncategorized, creating a missing README.
+func Add(path string, s skill.Skill) error {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		b = []byte(defaultIntro)
+	} else if err != nil {
+		return err
+	}
+	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+	out := strings.TrimRight(strings.Join(appendUncategorized(lines, []skill.Skill{s}), "\n"), "\n") + "\n"
+	return os.WriteFile(path, []byte(out), 0o644)
+}
