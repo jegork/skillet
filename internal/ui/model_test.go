@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jegork/skillet/internal/inventory"
+	"github.com/jegork/skillet/internal/skill"
 	"github.com/jegork/skillet/internal/testhome"
 )
 
@@ -91,7 +94,7 @@ func apply(m Model, msg tea.Msg) Model {
 	feed = func(out tea.Msg) {
 		switch out := out.(type) {
 		case list.FilterMatchesMsg, inventoryMsg, statusMsg,
-			searchDoneMsg, installDoneMsg, installedMsg, upstreamDoneMsg, updateDoneMsg, updatedMsg:
+			searchDoneMsg, installDoneMsg, installedMsg, upstreamDoneMsg, updateDoneMsg, updatedMsg, removedMsg:
 			m = apply(m, out)
 		case tea.BatchMsg:
 			for _, c := range out {
@@ -308,6 +311,114 @@ func TestRefineCommand(t *testing.T) {
 		if c.Args[1] != want {
 			t.Errorf("%s: prompt %q, want %q", agent, c.Args[1], want)
 		}
+	}
+}
+
+func TestDeleteConfirmFlow(t *testing.T) {
+	m := newTestModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = press(next.(Model), "D")
+	if !m.confirmDelete {
+		t.Fatalf("D must arm the confirm, flash %q", m.flash)
+	}
+	if !strings.Contains(view(m), "delete alpha?") {
+		t.Errorf("flash line %q, want the prompt", view(m))
+	}
+	m = press(m, "n")
+	if m.confirmDelete {
+		t.Error("n must cancel the confirm")
+	}
+	if _, err := os.Stat(filepath.Join(m.inv.Paths.SkillsDir(), "alpha")); err != nil {
+		t.Errorf("alpha deleted by cancelled confirm: %v", err)
+	}
+	// re-arm and cancel with esc, then confirm with y
+	m = press(m, "D", "esc")
+	if m.confirmDelete {
+		t.Error("esc must cancel the confirm")
+	}
+	m = press(m, "D", "y")
+	if m.flash != "deleted alpha" {
+		t.Fatalf("flash %q, want deleted alpha", m.flash)
+	}
+	if _, err := os.Stat(filepath.Join(m.inv.Paths.SkillsDir(), "alpha")); !os.IsNotExist(err) {
+		t.Errorf("alpha still there: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(m.inv.Paths.Home, ".claude", "skills", "alpha")); !os.IsNotExist(err) {
+		t.Errorf("claude stub still there: %v", err)
+	}
+	if it := m.list.SelectedItem().(item); it.skill.Name != "beta" {
+		t.Errorf("selected %q, want the neighbour beta", it.skill.Name)
+	}
+}
+
+func TestDeleteKeepsSelectionOnNeighbour(t *testing.T) {
+	m := newTestModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = press(next.(Model), "j", "D", "y") // beta, the middle skill
+	if m.flash != "deleted beta" {
+		t.Fatalf("flash %q", m.flash)
+	}
+	if it := m.list.SelectedItem().(item); it.skill.Name != "vend" {
+		t.Errorf("selected %q, want the next neighbour vend", it.skill.Name)
+	}
+}
+
+func TestDeleteVendoredRunsRemoveCmd(t *testing.T) {
+	m := newTestModel(t)
+	var removed []string
+	m.cfg.RemoveCmd = func(name string) *exec.Cmd {
+		removed = append(removed, name)
+		// mimic the CLI: drop the folder; Cleanup drops omp + README row
+		os.RemoveAll(filepath.Join(m.inv.Paths.SkillsDir(), name))
+		lock, _ := skill.ReadLock(filepath.Join(m.inv.Paths.Home, ".agents", ".skill-lock.json"))
+		delete(lock.Skills, name)
+		b, _ := json.MarshalIndent(lock, "", "  ")
+		os.WriteFile(filepath.Join(m.inv.Paths.Home, ".agents", ".skill-lock.json"), append(b, '\n'), 0o644)
+		return exec.Command("true")
+	}
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = press(next.(Model), "j", "j", "D", "y") // vend
+	if got := len(removed); got != 1 || removed[0] != "vend" {
+		t.Fatalf("RemoveCmd calls %v", removed)
+	}
+	if _, ok := m.list.SelectedItem().(item); !ok {
+		t.Fatalf("selection lost during exec")
+	}
+	// the ExecProcess callback feeds its result straight into Update
+	m = apply(m, removedMsg{err: nil, name: "vend"})
+	if m.flash != "deleted vend" {
+		t.Fatalf("flash %q", m.flash)
+	}
+	if _, err := os.Stat(filepath.Join(m.inv.Paths.SkillsDir(), "vend")); !os.IsNotExist(err) {
+		t.Error("vend still there")
+	}
+	lock, err := skill.ReadLock(filepath.Join(m.inv.Paths.Home, ".agents", ".skill-lock.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := lock.Skills["vend"]; ok {
+		t.Error("lock entry still there")
+	}
+}
+
+func TestDeleteDoneReloadsAndFlashes(t *testing.T) {
+	m := newTestModel(t)
+	m = apply(m, removedMsg{err: nil, name: "vend"})
+	if m.flash != "deleted vend" {
+		t.Errorf("flash %q", m.flash)
+	}
+	m = apply(m, removedMsg{err: exec.ErrNotFound, name: "vend"})
+	if !strings.Contains(m.flash, "remove vend") {
+		t.Errorf("flash %q, want remove error", m.flash)
+	}
+}
+
+func TestDeleteVendoredWithoutRemoveCmd(t *testing.T) {
+	m := newTestModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = press(next.(Model), "j", "j", "D") // vend, no RemoveCmd
+	if m.flash != "delete not configured" || m.confirmDelete {
+		t.Errorf("flash %q confirmDelete %v", m.flash, m.confirmDelete)
 	}
 }
 
