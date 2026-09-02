@@ -15,6 +15,7 @@ import (
 
 	"github.com/jegork/skillet/internal/config"
 	"github.com/jegork/skillet/internal/doctor"
+	"github.com/jegork/skillet/internal/explore"
 	"github.com/jegork/skillet/internal/inventory"
 	"github.com/jegork/skillet/internal/readme"
 	"github.com/jegork/skillet/internal/registry"
@@ -51,7 +52,7 @@ func main() {
 	})
 	showVersion := fs.Bool("version", false, "print version")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [--store chezmoi|git] [config|doctor|status|readme|install|outdated|store init]")
+		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [--store chezmoi|git] [config|doctor|status|readme|install|outdated|explore|store init]")
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(os.Args[1:])
@@ -79,6 +80,8 @@ func main() {
 		err = runReadme(home)
 	case "outdated":
 		err = runOutdated(home, &upstream.GitHub{})
+	case "explore":
+		err = runExplore(home, fs.Args()[1:], &upstream.GitHub{})
 	case "install":
 		err = runInstall(home, fs.Args()[1:])
 	case "store":
@@ -122,15 +125,15 @@ func runTUI(home string, st store.Store, cfgPath string) error {
 		Install: func(ctx context.Context, source, skill string) error {
 			return registry.Add(ctx, home, source, skill)
 		},
-		Upstream: func(ctx context.Context, force bool) error {
-			lock, err := skill.ReadLock(skill.Paths{Home: home}.LockFile())
-			if err != nil {
-				return err
-			}
-			return upstream.Refresh(ctx, upstream.Path(home), lock, &upstream.GitHub{}, force)
-		},
 		UpdateCmd: func(name string) *exec.Cmd {
 			return registry.UpdateCmd(home, name)
+		},
+		Vendors: func() []explore.Skill {
+			inv, err := inventory.Load(home)
+			if err != nil {
+				return nil
+			}
+			return explore.List(upstream.ReadCache(upstream.Path(home)), inv)
 		},
 	})
 	_, err = tea.NewProgram(m).Run()
@@ -330,6 +333,37 @@ func runOutdated(home string, f upstream.Fetcher) error {
 	sort.Strings(names)
 	for _, name := range names {
 		fmt.Printf("%s\t%s\n", name, inv.Lock.Skills[name].Source)
+	}
+	return nil
+}
+
+// runExplore prints the vendor listing for scripts: name, vendor and
+// installed/available, one tab-separated line per skill, optionally narrowed
+// to one owner/repo. It refreshes the upstream cache first; a repo whose
+// fetch fails keeps its cache entry, so the listing degrades gracefully.
+func runExplore(home string, args []string, f upstream.Fetcher) error {
+	inv, err := inventory.Load(home)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := upstream.Refresh(ctx, upstream.Path(home), explore.Locks(inv), f, false); err != nil {
+		return err
+	}
+	var only string
+	if len(args) > 0 {
+		only = args[0]
+	}
+	for _, s := range explore.List(upstream.ReadCache(upstream.Path(home)), inv) {
+		if only != "" && s.Vendor != only {
+			continue
+		}
+		state := "available"
+		if s.Installed {
+			state = "installed"
+		}
+		fmt.Printf("%s\t%s\t%s\n", s.Name, s.Vendor, state)
 	}
 	return nil
 }

@@ -30,6 +30,7 @@ type Project struct {
 	Root      string
 	SkillsDir string
 	Skills    []skill.Skill
+	Lock      skill.ProjectLock
 	Consumers []consumer.Consumer
 	Reports   map[string]consumer.Report
 }
@@ -99,6 +100,7 @@ func loadProject(p project.Project) (Project, error) {
 	if err != nil {
 		return out, fmt.Errorf("%s: %w", p.Root, err)
 	}
+	out.Lock = lock
 	if out.Skills, err = skill.Scan(out.SkillsDir, skill.Lock{}); err != nil {
 		return out, err
 	}

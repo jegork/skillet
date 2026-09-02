@@ -35,11 +35,41 @@
       "url": "https://api.github.com/repos/emilkowalski/skills/git/blobs/6a12aa2f798144d7931511ae5ae16cfb85fb1933"
     },
     {
+      "path": "SKILL.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b000000000000000000000000000000000000001",
+      "size": 812,
+      "url": "https://api.github.com/repos/emilkowalski/skills/git/blobs/b000000000000000000000000000000000000001"
+    },
+    {
       "path": "skills",
       "mode": "040000",
       "type": "tree",
       "sha": "e415d8910895797c39b6163db830c47cbaad3362",
       "url": "https://api.github.com/repos/emilkowalski/skills/git/trees/e415d8910895797c39b6163db830c47cbaad3362"
+    },
+    {
+      "path": "skills/.curated",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b000000000000000000000000000000000000002",
+      "url": "https://api.github.com/repos/emilkowalski/skills/git/trees/b000000000000000000000000000000000000002"
+    },
+    {
+      "path": "skills/.curated/x",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b000000000000000000000000000000000000003",
+      "url": "https://api.github.com/repos/emilkowalski/skills/git/trees/b000000000000000000000000000000000000003"
+    },
+    {
+      "path": "skills/.curated/x/SKILL.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b000000000000000000000000000000000000004",
+      "size": 1024,
+      "url": "https://api.github.com/repos/emilkowalski/skills/git/blobs/b000000000000000000000000000000000000004"
     },
     {
       "path": "skills/animate-expo",
@@ -253,6 +283,35 @@
       "sha": "56f4ed75f11ce7452445ba357d9357cad885c5f9",
       "size": 8108,
       "url": "https://api.github.com/repos/emilkowalski/skills/git/blobs/56f4ed75f11ce7452445ba357d9357cad885c5f9"
+    },
+    {
+      "path": "tools",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b000000000000000000000000000000000000005",
+      "url": "https://api.github.com/repos/emilkowalski/skills/git/trees/b000000000000000000000000000000000000005"
+    },
+    {
+      "path": "tools/deep",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b000000000000000000000000000000000000006",
+      "url": "https://api.github.com/repos/emilkowalski/skills/git/trees/b000000000000000000000000000000000000006"
+    },
+    {
+      "path": "tools/deep/digger",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b000000000000000000000000000000000000007",
+      "url": "https://api.github.com/repos/emilkowalski/skills/git/trees/b000000000000000000000000000000000000007"
+    },
+    {
+      "path": "tools/deep/digger/SKILL.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b000000000000000000000000000000000000008",
+      "size": 2048,
+      "url": "https://api.github.com/repos/emilkowalski/skills/git/blobs/b000000000000000000000000000000000000008"
     },
     {
       "path": "skills/review-animations/STANDARDS.md",
