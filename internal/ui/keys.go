@@ -46,8 +46,8 @@ func (k keyMap) ShortHelp() []key.Binding {
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.Filter, k.Tree, k.Focus},
+		{k.Up, k.Down, k.Filter, k.Tree, k.Collapse, k.Expand, k.Focus},
 		{k.Edit, k.Refine, k.Toggle, k.Rename, k.Move, k.Sync, k.Install, k.Doctor, k.Reload, k.Readme, k.Upstream, k.Update},
-		{k.Help, k.Back, k.Quit},
+		{k.Config, k.Help, k.Back, k.Quit},
 	}
 }
