@@ -14,8 +14,8 @@ type LockEntry struct {
 	SourceType      string    `json:"sourceType"`
 	SourceURL       string    `json:"sourceUrl"`
 	SkillPath       string    `json:"skillPath"`
-	SkillFolderHash string    `json:"skillFolderHash"`
-	ComputedHash    string    `json:"computedHash"` // project lock v1: sha256 of the skill folder, see ContentHash
+	SkillFolderHash string    `json:"skillFolderHash,omitempty"`
+	ComputedHash    string    `json:"computedHash,omitempty"` // project lock v1: sha256 of the skill folder, see ContentHash
 	InstalledAt     time.Time `json:"installedAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/jegork/skillet/internal/consumer"
 	"github.com/jegork/skillet/internal/doctor"
 	"github.com/jegork/skillet/internal/inventory"
+	"github.com/jegork/skillet/internal/move"
 	"github.com/jegork/skillet/internal/readme"
 	"github.com/jegork/skillet/internal/registry"
 	"github.com/jegork/skillet/internal/rename"
@@ -40,6 +41,7 @@ const (
 	modeHelp
 	modeSync
 	modeRename
+	modeMove
 	modeSearch
 	modeRefine
 )
@@ -109,8 +111,9 @@ type Model struct {
 	lastSelected    string
 	renameInput     textinput.Model
 	refineAgents    []string
-	selectNext      string // skill to select after the next reload
-	selectGroup     string // group to select after the next rebuild
+	selectNext      string   // skill to select after the next reload
+	selectGroup     string   // group to select after the next rebuild
+	moveTargets     []string // skill roots, "" first when global is a target
 	upstreamPending bool
 	tree            bool // group skills by origin instead of a flat list
 	collapsed       map[string]bool
@@ -228,6 +231,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeRename {
 		return m.updateRename(msg)
 	}
+	if m.mode == modeMove {
+		return m.updateMove(msg)
+	}
 	if m.mode == modeSearch {
 		return m.updateSearch(msg)
 	}
@@ -329,6 +335,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.startRefine()
 	case key.Matches(msg, m.keys.Rename):
 		return m.startRename()
+	case key.Matches(msg, m.keys.Move):
+		return m.startMove()
 	case key.Matches(msg, m.keys.Sync):
 		return m.startSync()
 	case key.Matches(msg, m.keys.Upstream):
@@ -816,6 +824,65 @@ func (m Model) updateRename(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// startMove opens the scope picker for the selected skill: global (when the
+// skill lives in a project) and every other discovered project.
+func (m Model) startMove() (tea.Model, tea.Cmd) {
+	it, ok := m.list.SelectedItem().(item)
+	if !ok {
+		return m, nil
+	}
+	var targets []string
+	if it.skill.Scope != "" {
+		targets = append(targets, "")
+	}
+	for _, p := range m.inv.Projects {
+		if p.Root != it.skill.Scope {
+			targets = append(targets, p.Root)
+		}
+	}
+	if len(targets) == 0 {
+		m.flash = "no other scope to move to"
+		return m, nil
+	}
+	m.mode = modeMove
+	m.moveTargets = targets
+	return m, nil
+}
+
+func (m Model) updateMove(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, m.keys.Back) {
+		m.mode = modeList
+		return m, nil
+	}
+	s := msg.String()
+	if len(s) != 1 || s[0] < '1' || int(s[0]-'1') >= len(m.moveTargets) {
+		return m, nil
+	}
+	it, ok := m.list.SelectedItem().(item)
+	if !ok {
+		m.mode = modeList
+		return m, nil
+	}
+	root := m.moveTargets[s[0]-'1']
+	m.mode = modeList
+	in := move.Input{Home: m.inv.Paths, Skills: m.inv.Skills, Projects: m.inv.Projects}
+	if err := move.Move(in, it.skill, root); err != nil {
+		m.flash = "move: " + err.Error()
+		return m, nil
+	}
+	m.flash = "moved " + it.skill.Name + " to " + moveScopeName(root)
+	m.selectNext = it.skill.Name
+	return m, m.reload()
+}
+
+// moveScopeName names a target root for the picker and the flash.
+func moveScopeName(root string) string {
+	if root == "" {
+		return "global"
+	}
+	return filepath.Base(root)
+}
+
 // refineAgentNames are the CLIs refine can launch, probed with lookPath in
 // this order.
 var refineAgentNames = []string{"claude", "omp", "codex"}
@@ -1016,6 +1083,13 @@ func (m Model) flashLine() string {
 		parts := []string{"refine with:"}
 		for i, a := range m.refineAgents {
 			parts = append(parts, fmt.Sprintf("%d %s", i+1, a))
+		}
+		return m.styles.flash.Render(pad(strings.Join(parts, " · ")+" · esc cancel", m.width))
+	}
+	if m.mode == modeMove {
+		parts := []string{"move to:"}
+		for i, root := range m.moveTargets {
+			parts = append(parts, fmt.Sprintf("%d %s", i+1, moveScopeName(root)))
 		}
 		return m.styles.flash.Render(pad(strings.Join(parts, " · ")+" · esc cancel", m.width))
 	}

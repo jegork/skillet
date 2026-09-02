@@ -131,3 +131,41 @@ func TestRename(t *testing.T) {
 		t.Errorf("missing readme should be a no-op, got %v", err)
 	}
 }
+
+func TestDrop(t *testing.T) {
+	h := testhome.New(t)
+	p := h.Readme("| `old` | own | O |", "| `other` | own | X |")
+	if err := readme.Drop(p, "old"); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := os.ReadFile(p)
+	if strings.Contains(string(out), "`old`") || !strings.Contains(string(out), "| `other` | own | X |") {
+		t.Errorf("drop failed:\n%s", out)
+	}
+	if err := readme.Drop(p, "absent"); err != nil {
+		t.Errorf("dropping an absent row should be a no-op, got %v", err)
+	}
+	if err := readme.Drop(p+".missing", "a"); err != nil {
+		t.Errorf("missing readme should be a no-op, got %v", err)
+	}
+}
+
+func TestAdd(t *testing.T) {
+	h := testhome.New(t)
+	s := skill.Skill{Name: "fresh", Description: "does fresh things", Origin: skill.Origin{Vendored: true, Source: "acme/skills"}}
+	p := h.Readme("| `old` | own | O |")
+	if err := readme.Add(p, s); err != nil {
+		t.Fatal(err)
+	}
+	// a missing README is created with the default intro and the row
+	if err := readme.Add(p+".missing", s); err != nil {
+		t.Fatal(err)
+	}
+	out2, err := os.ReadFile(p + ".missing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out2), "| `fresh` | vendored (acme/skills) | does fresh things |") {
+		t.Errorf("add did not create the readme:\n%s", out2)
+	}
+}
