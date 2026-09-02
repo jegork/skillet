@@ -30,11 +30,20 @@ func TestPathDefault(t *testing.T) {
 }
 
 func TestPathRespectsXDGConfigHome(t *testing.T) {
-	h := testhome.New(t)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h.Dir, "cfg"))
-	want := filepath.Join(h.Dir, "cfg", "skillet", "config.yml")
-	if got := Path(h.Dir); got != want {
-		t.Errorf("Path = %q, want %q", got, want)
+	real, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no user home")
+	}
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	if got, want := Path(real), filepath.Join(xdg, "skillet", "config.yml"); got != want {
+		t.Errorf("real home: Path = %q, want %q", got, want)
+	}
+	// any other home keeps its own .config, so --home and temp homes are never
+	// redirected to the user's config
+	other := t.TempDir()
+	if got, want := Path(other), filepath.Join(other, ".config", "skillet", "config.yml"); got != want {
+		t.Errorf("other home: Path = %q, want %q", got, want)
 	}
 }
 
@@ -340,11 +349,4 @@ func TestEnsureCreatesMissing(t *testing.T) {
 	if err := Ensure(h.Dir); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// the CI runner exports XDG_CONFIG_HOME, which would point every test at the
-// same real config path instead of its temp home
-func TestMain(m *testing.M) {
-	os.Unsetenv("XDG_CONFIG_HOME")
-	os.Exit(m.Run())
 }

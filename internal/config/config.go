@@ -43,9 +43,14 @@ var (
 	}
 )
 
+// Path is the config file for home. XDG_CONFIG_HOME is honoured only for the
+// real user home: an explicit --home (or a test's temp home) must never be
+// redirected to the user's own config.
 func Path(home string) string {
 	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
-		return filepath.Join(dir, "skillet", "config.yml")
+		if real, err := os.UserHomeDir(); err == nil && filepath.Clean(real) == filepath.Clean(home) {
+			return filepath.Join(dir, "skillet", "config.yml")
+		}
 	}
 	return filepath.Join(home, ".config", "skillet", "config.yml")
 }
