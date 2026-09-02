@@ -84,6 +84,7 @@ skillet config edit
 | `R` | regenerate the README index, keeping its hand-made sections |
 | `i` | search skills.sh, `enter` installs the picked skill via `pnpx skills` |
 | `a` | explore the skills your vendored repos ship, `enter` installs |
+| `r` | rescan |
 | `tab` | scroll the preview |
 | `?` | help |
 | `q` | quit |
@@ -148,6 +149,7 @@ internal/readme     README index parse and regeneration
 internal/rename     rename an own skill and fix everything that pointed at it
 internal/config     read/write ~/.config/skillet/config.yml, comments intact
 internal/store      Store interface: Status / Capture / Diff / Commit / Push
+internal/store/chezmoi
 internal/registry   search skills.sh and install through pnpx skills
 internal/explore    vendor listing from the upstream cache
 internal/store/gitrepo
