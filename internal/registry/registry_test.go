@@ -76,6 +76,10 @@ func TestParseFindCRLF(t *testing.T) {
 }
 
 func TestFindLive(t *testing.T) {
+	// hits the network and pnpx; opt in explicitly so task test stays fast
+	if os.Getenv("SKILLET_LIVE_TESTS") == "" {
+		t.Skip("set SKILLET_LIVE_TESTS=1 to run live registry tests")
+	}
 	skipIfNoPnpx(t)
 	ctx, cancel := context.WithTimeout(context.Background(), findTimeout)
 	defer cancel()
@@ -92,6 +96,10 @@ func TestFindLive(t *testing.T) {
 }
 
 func TestAddLive(t *testing.T) {
+	// hits the network and pnpx; opt in explicitly so task test stays fast
+	if os.Getenv("SKILLET_LIVE_TESTS") == "" {
+		t.Skip("set SKILLET_LIVE_TESTS=1 to run live registry tests")
+	}
 	skipIfNoPnpx(t)
 	home := t.TempDir()
 	ctx, cancel := context.WithTimeout(context.Background(), addTimeout)
