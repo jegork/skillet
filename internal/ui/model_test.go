@@ -90,7 +90,8 @@ func apply(m Model, msg tea.Msg) Model {
 	var feed func(tea.Msg)
 	feed = func(out tea.Msg) {
 		switch out := out.(type) {
-		case list.FilterMatchesMsg, inventoryMsg, statusMsg:
+		case list.FilterMatchesMsg, inventoryMsg, statusMsg,
+			searchDoneMsg, installDoneMsg, installedMsg:
 			m = apply(m, out)
 		case tea.BatchMsg:
 			for _, c := range out {
