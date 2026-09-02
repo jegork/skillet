@@ -41,6 +41,7 @@ type Skill struct {
 	Author      string // frontmatter metadata.author, a vendor marker
 	License     string
 	Origin      Origin
+	Scope       string // project root when the skill lives in a project; empty is the global home
 	ModTime     time.Time
 	HasSkillMD  bool
 	Markdown    []string

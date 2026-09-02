@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -14,17 +15,26 @@ import (
 const groupMarker = "\x00"
 
 type skillGroup struct {
-	key    string
+	key    string // "own", a vendored source, or a project root
+	label  string // display name in the group row
 	skills []skill.Skill
 }
 
 // groupSkills orders skills into tree groups: own first, then one group per
-// vendored source, groups and children in name order.
+// vendored source, then one group per project, all in name order.
 func groupSkills(skills []skill.Skill) []skillGroup {
 	var own []skill.Skill
 	bySource := map[string][]skill.Skill{}
-	var sources []string
+	byProject := map[string][]skill.Skill{}
+	var sources, projects []string
 	for _, s := range skills {
+		if s.Scope != "" {
+			if _, ok := byProject[s.Scope]; !ok {
+				projects = append(projects, s.Scope)
+			}
+			byProject[s.Scope] = append(byProject[s.Scope], s)
+			continue
+		}
 		if !s.Origin.Vendored {
 			own = append(own, s)
 			continue
@@ -35,18 +45,23 @@ func groupSkills(skills []skill.Skill) []skillGroup {
 		bySource[s.Origin.Source] = append(bySource[s.Origin.Source], s)
 	}
 	sort.Strings(sources)
-	groups := make([]skillGroup, 0, len(sources)+1)
+	sort.Strings(projects)
+	var groups []skillGroup
 	if len(own) > 0 {
-		groups = append(groups, skillGroup{key: "own", skills: own})
+		groups = append(groups, skillGroup{key: "own", label: "own", skills: own})
 	}
 	for _, src := range sources {
-		groups = append(groups, skillGroup{key: src, skills: bySource[src]})
+		groups = append(groups, skillGroup{key: src, label: "vend " + src, skills: bySource[src]})
+	}
+	for _, p := range projects {
+		groups = append(groups, skillGroup{key: p, label: "proj " + filepath.Base(p), skills: byProject[p]})
 	}
 	return groups
 }
 
 type groupItem struct {
 	key      string
+	label    string
 	children []string
 }
 
