@@ -25,6 +25,8 @@ skillet status        # store drift: uncaptured, uncommitted, ahead
 skillet readme        # regenerate the README index
 skillet install owner/repo [--skill NAME]
                       # install from skills.sh via pnpx skills
+skillet explore [owner/repo]
+                      # list what your vendored repos ship
 skillet outdated      # vendored skills with upstream changes
 skillet store init    # create the git store repo (--git-dir, --remote)
 skillet config        # path, get/set keys, edit in $EDITOR
@@ -81,7 +83,7 @@ skillet config edit
 | `d` | doctor report |
 | `R` | regenerate the README index, keeping its hand-made sections |
 | `i` | search skills.sh, `enter` installs the picked skill via `pnpx skills` |
-| `r` | rescan |
+| `a` | explore the skills your vendored repos ship, `enter` installs |
 | `tab` | scroll the preview |
 | `?` | help |
 | `q` | quit |
@@ -127,6 +129,12 @@ The upstream check asks GitHub for one recursive tree per repo (token from
 hashes in `~/.cache/skillet/upstream.json` for an hour. Offline or rate
 limited: skills read as "unknown" and the last cache stays.
 
+The same cache drives the explore view (`a` in the TUI, `skillet explore`
+for scripts): one group per vendored `owner/repo` — home lock plus every
+project lock — listing each skill folder the repo tree contains, marked
+installed when a locked skill matches, otherwise available. `enter` on an
+available skill installs it through the same path as `i`.
+
 ## Layout
 
 ```
@@ -140,7 +148,8 @@ internal/readme     README index parse and regeneration
 internal/rename     rename an own skill and fix everything that pointed at it
 internal/config     read/write ~/.config/skillet/config.yml, comments intact
 internal/store      Store interface: Status / Capture / Diff / Commit / Push
-internal/store/chezmoi
+internal/registry   search skills.sh and install through pnpx skills
+internal/explore    vendor listing from the upstream cache
 internal/store/gitrepo
 internal/ui         bubbletea front end
 internal/upstream   upstream update checks: GitHub trees, ~/.cache/skillet/upstream.json

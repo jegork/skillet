@@ -196,3 +196,57 @@ func TestRunOutdatedQuietWhenUpToDateOrOffline(t *testing.T) {
 		t.Errorf("offline home printed %q", out.String())
 	}
 }
+
+func exploreHome(t *testing.T) *testhome.Home {
+	h := testhome.New(t)
+	h.Skill("vend", "vendored one")
+	h.Lock(map[string]string{"vend": "acme/skills"})
+	h.Readme("| `vend` | vendored (acme/skills) | vendored one |")
+	return h
+}
+
+func TestRunExplorePrintsVendors(t *testing.T) {
+	h := exploreHome(t)
+	f := fakeFetcher{trees: map[string][]upstream.Entry{
+		"acme/skills": {
+			{Path: "skills/vend", Type: "tree", SHA: "2222222222222222222222222222222222222222"},
+			{Path: "skills/vend/SKILL.md", Type: "blob", SHA: "a1"},
+			{Path: "skills/animate/SKILL.md", Type: "blob", SHA: "a2"},
+			{Path: "skills/.curated/x/SKILL.md", Type: "blob", SHA: "a3"},
+		},
+	}}
+	out := captureStdout(t, func() {
+		if err := runExplore(h.Dir, nil, f); err != nil {
+			t.Fatal(err)
+		}
+	})
+	got := out.String()
+	for _, want := range []string{
+		"vend\tacme/skills\tinstalled\n",
+		"animate\tacme/skills\tavailable\n",
+		"x\tacme/skills\tavailable\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output missing %q: %q", want, got)
+		}
+	}
+	// offline with a cache still lists from the cache: refresh keeps the old entry
+	out2 := captureStdout(t, func() {
+		offline := fakeFetcher{fail: map[string]error{"acme/skills": errors.New("offline")}}
+		if err := runExplore(h.Dir, nil, offline); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if out2.String() != got {
+		t.Errorf("cached run %q vs fresh %q", out2.String(), got)
+	}
+	// narrowing to one vendor
+	out3 := captureStdout(t, func() {
+		if err := runExplore(h.Dir, []string{"other/repo"}, f); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if out3.Len() != 0 {
+		t.Errorf("vendor filter printed %q", out3.String())
+	}
+}

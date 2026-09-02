@@ -4,7 +4,7 @@ import "charm.land/bubbles/v2/key"
 
 type keyMap struct {
 	Up, Down, Filter, Edit, Refine, Sync, Doctor, Reload, Readme, Focus, Help, Quit, Back key.Binding
-	Confirm, TogglePush, Install, Config                                                  key.Binding
+	Confirm, TogglePush, Install, Explore, Config                                         key.Binding
 	Toggle, Rename, Move                                                                  key.Binding
 	Upstream, Update                                                                      key.Binding
 	Tree, Collapse, Expand                                                                key.Binding
@@ -20,6 +20,7 @@ func newKeyMap() keyMap {
 		Sync:       key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
 		Move:       key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "move between scopes")),
 		Install:    key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "install from registry")),
+		Explore:    key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "explore vendors")),
 		Doctor:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "doctor")),
 		Reload:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
 		Readme:     key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "regenerate README index")),
@@ -41,13 +42,13 @@ func newKeyMap() keyMap {
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Edit, k.Refine, k.Toggle, k.Sync, k.Install, k.Filter, k.Tree, k.Config, k.Doctor, k.Upstream, k.Help, k.Quit}
+	return []key.Binding{k.Edit, k.Refine, k.Toggle, k.Sync, k.Install, k.Explore, k.Filter, k.Tree, k.Config, k.Doctor, k.Upstream, k.Help, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Filter, k.Tree, k.Collapse, k.Expand, k.Focus},
-		{k.Edit, k.Refine, k.Toggle, k.Rename, k.Move, k.Sync, k.Install, k.Doctor, k.Reload, k.Readme, k.Upstream, k.Update},
+		{k.Edit, k.Refine, k.Toggle, k.Rename, k.Move, k.Sync, k.Install, k.Explore, k.Doctor, k.Reload, k.Readme, k.Upstream, k.Update},
 		{k.Config, k.Help, k.Back, k.Quit},
 	}
 }

@@ -21,6 +21,7 @@ import (
 
 	"github.com/jegork/skillet/internal/consumer"
 	"github.com/jegork/skillet/internal/doctor"
+	"github.com/jegork/skillet/internal/explore"
 	"github.com/jegork/skillet/internal/inventory"
 	"github.com/jegork/skillet/internal/move"
 	"github.com/jegork/skillet/internal/readme"
@@ -44,6 +45,7 @@ const (
 	modeMove
 	modeSearch
 	modeRefine
+	modeExplore
 )
 
 type pane int
@@ -63,6 +65,7 @@ type Config struct {
 	Install    func(ctx context.Context, source, skill string) error
 	Upstream   func(ctx context.Context, force bool) error // nil disables the upstream check
 	UpdateCmd  func(name string) *exec.Cmd                 // nil disables updating
+	Vendors    func() []explore.Skill                      // nil disables the explore view
 }
 type inventoryMsg struct {
 	inv inventory.Inventory
@@ -103,6 +106,7 @@ type Model struct {
 	focus         pane
 	sync          syncState
 	search        searchState
+	explore       exploreState
 
 	status          store.Status
 	statusErr       error
@@ -166,6 +170,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.flash = "reload failed: " + msg.err.Error()
 			return m, nil
+		}
+		if m.mode == modeExplore && m.cfg.Vendors != nil {
+			m.explore.skills = m.cfg.Vendors()
 		}
 		cmd := m.setInventory(msg.inv)
 		return m, cmd
@@ -242,6 +249,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.list.SettingFilter() {
 		return m.forward(msg)
+	}
+	if m.mode == modeExplore {
+		return m.updateExplore(msg)
 	}
 	if m.tree && m.mode == modeList && m.focus == paneList {
 		if _, ok := m.list.SelectedItem().(groupItem); ok {
@@ -345,6 +355,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.updateSkill()
 	case key.Matches(msg, m.keys.Install):
 		return m.startSearch()
+	case key.Matches(msg, m.keys.Explore):
+		return m.startExplore()
 	}
 	return m.forward(msg)
 }
@@ -352,7 +364,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // forward hands a message to whichever component owns the keyboard.
 func (m Model) forward(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	if m.focus == panePreview || m.mode != modeList {
+	if m.focus == panePreview || (m.mode != modeList && m.mode != modeExplore) {
 		m.preview, cmd = m.preview.Update(msg)
 		return m, cmd
 	}
@@ -458,11 +470,15 @@ func (m *Model) rebuildItems() tea.Cmd {
 			selected = sel.skill.Name
 		case groupItem:
 			selected = groupMarker + sel.key
+		case exploreItem:
+			selected = sel.key()
 		}
 	}
 	bySkill := doctor.BySkill(m.inv.Findings)
 	var items []list.Item
-	if !m.tree {
+	if m.mode == modeExplore {
+		items = m.exploreItems()
+	} else if !m.tree {
 		for _, s := range m.inv.Skills {
 			items = append(items, m.makeItem(s, bySkill))
 		}
@@ -495,6 +511,10 @@ func (m *Model) rebuildItems() tea.Cmd {
 					}
 				case groupItem:
 					if groupMarker+sel.key == selected {
+						m.list.Select(i)
+					}
+				case exploreItem:
+					if sel.key() == selected {
 						m.list.Select(i)
 					}
 				}
@@ -610,11 +630,14 @@ func (m *Model) refreshPreview() {
 	case modeDoctor:
 		m.preview.SetContent(m.doctorReport())
 	default:
-		if it, ok := m.list.SelectedItem().(item); ok {
-			m.preview.SetContent(m.wrap(m.skillPreview(it)))
-		} else if g, ok := m.list.SelectedItem().(groupItem); ok {
-			m.preview.SetContent(m.wrap(m.groupPreview(g)))
-		} else {
+		switch sel := m.list.SelectedItem().(type) {
+		case item:
+			m.preview.SetContent(m.wrap(m.skillPreview(sel)))
+		case exploreItem:
+			m.preview.SetContent(m.wrap(m.explorePreview(sel)))
+		case groupItem:
+			m.preview.SetContent(m.wrap(m.groupPreview(sel)))
+		default:
 			m.preview.SetContent(m.styles.faint.Render("no skill selected"))
 		}
 	}
@@ -1045,7 +1068,11 @@ func (m Model) render() string {
 	if m.mode == modeSearch {
 		return m.renderSearch()
 	}
-	listView := m.dg.header(m.list.Width()) + "\n" + strings.TrimRight(m.list.View(), "\n")
+	head := m.dg.header(m.list.Width())
+	if m.mode == modeExplore {
+		head = m.styles.header.Render("  " + pad("skill", max(m.list.Width()-9, 5)) + "  state")
+	}
+	listView := head + "\n" + strings.TrimRight(m.list.View(), "\n")
 	body := listView
 	if m.preview.Width() > 0 {
 		sep := m.styles.separator.Render(strings.TrimRight(strings.Repeat("│\n", m.preview.Height()), "\n"))
@@ -1136,8 +1163,12 @@ func (m Model) statusBar() string {
 	if warn+errs > 0 {
 		dr = fmt.Sprintf("%s %s", s.warn.Render(fmt.Sprintf("%d warn", warn)), s.err.Render(fmt.Sprintf("%d err", errs)))
 	}
+	total := len(m.inv.Skills)
+	if m.mode == modeExplore {
+		total = len(m.explore.skills)
+	}
 	parts = append(parts, "doctor: "+dr)
-	parts = append(parts, fmt.Sprintf("%d/%d", visibleSkills(m.list), len(m.inv.Skills)))
+	parts = append(parts, fmt.Sprintf("%d/%d", visibleSkills(m.list), total))
 	parts = append(parts, m.help.ShortHelpView(m.keys.ShortHelp()))
 	return s.statusBar.MaxWidth(max(m.width, 1)).Render(strings.Join(parts, "  │  "))
 }
