@@ -3,6 +3,8 @@ package ui
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -67,10 +69,7 @@ func (d delegate) Render(w io.Writer, m list.Model, index int, li list.Item) {
 }
 
 func (d delegate) groupRow(g groupItem, selected bool) string {
-	marker, name := "▸", "own"
-	if g.key != "own" {
-		name = "vend " + g.key
-	}
+	marker, name := "▸", g.label
 	if d.expanded != nil && d.expanded(g.key) {
 		marker = "▾"
 	}
@@ -78,11 +77,14 @@ func (d delegate) groupRow(g groupItem, selected bool) string {
 	if selected {
 		cursor = d.styles.selected.Render("> ")
 		style = d.styles.selected
-	} else if g.key != "own" {
+	} else if g.key != "own" && !isProjectKey(g.key) {
 		style = d.styles.vendored
 	}
 	return cursor + style.Render(marker+" "+name) + d.styles.faint.Render(fmt.Sprintf(" (%d)", len(g.children)))
 }
+
+// isProjectKey reports whether a group key is a project root path.
+func isProjectKey(key string) bool { return strings.HasPrefix(key, string(os.PathSeparator)) }
 
 func (d delegate) header(width int) string {
 	c := layout(width, len(d.consumers))
@@ -112,8 +114,11 @@ func (d delegate) row(it item, c columns, selected bool) string {
 		name = pad(it.skill.Name, c.name)
 	}
 	origin := pad("own", c.origin)
-	if it.skill.Origin.Vendored {
+	switch {
+	case it.skill.Origin.Vendored:
 		origin = s.vendored.Render(pad("vend "+it.skill.Origin.Source, c.origin))
+	case it.skill.Scope != "":
+		origin = s.vendored.Render(pad("@"+filepath.Base(it.skill.Scope), c.origin))
 	}
 	var badges strings.Builder
 	for _, n := range d.consumers {

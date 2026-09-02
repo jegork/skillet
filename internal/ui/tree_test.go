@@ -183,7 +183,7 @@ func TestTreeEmptyInventory(t *testing.T) {
 
 func TestGroupRowRendering(t *testing.T) {
 	d := delegate{styles: newStyles(true), consumers: []string{"claude", "codex", "omp"}, now: func() time.Time { return time.Now() }}
-	g := groupItem{key: "own", children: []string{"alpha", "beta"}}
+	g := groupItem{key: "own", label: "own", children: []string{"alpha", "beta"}}
 	d.expanded = func(string) bool { return true }
 	if row := ansi.Strip(d.groupRow(g, false)); !strings.Contains(row, "▾ own (2)") {
 		t.Errorf("expanded group row %q", row)

@@ -1,8 +1,8 @@
 # skillet
 
-Terminal UI for the agent skills in `~/.agents/skills`: what you have, which
-tool sees it, what is yours versus vendored, what drifted, and one key to sync
-it all into your dotfiles.
+Terminal UI for the agent skills in `~/.agents/skills` and inside your
+projects: what you have, which tool sees it, what is yours versus vendored,
+what drifted, and one key to sync it all into your dotfiles.
 
 Skills are edited in place. The store is captured from `$HOME`, never edited
 directly. Two backends: `chezmoi` (default) or `git`.
@@ -85,24 +85,39 @@ In the sync review: `enter` commits, `ctrl+p` toggles push, `esc` cancels and
 leaves the capture staged.
 
 `t` switches the list to a tree: your own skills first, then one collapsible
-group per vendored `owner/repo`, groups and children sorted by name. Filtering
-keeps working and hides groups without matches.
+group per vendored `owner/repo`, then one per project, groups and children
+sorted by name. Filtering keeps working and hides groups without matches.
 
-Columns: origin (`own` or `vend owner/repo` from `~/.agents/.skill-lock.json`),
-consumer badges (`C` claude, `X` codex, `O` omp), doctor finding count, last
-modified.
+Project skills come from the `projects.roots` and `projects.paths` config:
+skillet probes each project's `.agents/skills`, `.claude/skills`,
+`.codex/skills` and `skills-lock.json` without crawling. In the mirror layout
+(`.agents/skills` canonical with `.claude/skills` stubs) toggling works as at
+home; a bare `.claude/skills` dir with real skill folders is shown but its
+visibility cannot be toggled. Project skills appear in the flat list with an
+`@project` origin marker. Doctor flags project skills shadowing a global
+skill of the same name, broken project stubs, project lock entries without a
+folder, and a skills dir whose content hash differs from the project lock's
+`computedHash`. Sync stays global-only for now.
+
+Columns: origin (`own` or `vend owner/repo` from `~/.agents/.skill-lock.json`,
+project skills suffixed ` @project`), consumer badges (`C` claude, `X` codex,
+`O` omp), doctor finding count, last modified.
 
 Doctor checks: broken consumer stubs, cross-references to unknown skills,
 stale README rows, lock entries without a folder, missing SKILL.md or
-description, and vendored folders whose git tree hash differs from the lock
-(info only, since `pnpx skills` rewrites some frontmatter on install).
+description, vendored folders whose git tree hash differs from the lock
+(info only, since `pnpx skills` rewrites some frontmatter on install), and —
+for project skills — shadowed global names, broken project stubs, project
+lock orphans and project skills dir drift against `computedHash`.
 
 ## Layout
 
 ```
-internal/skill      scan skills + lock file
+internal/skill      scan skills + lock files
+internal/project    project discovery from projects.roots/paths
 internal/consumer   which tool sees which skill (symlink dirs, omp ignore globs)
 internal/doctor     dangling stubs, unknown cross-references, stale README, lock orphans, drift
+internal/project    project discovery: roots, paths, fixed probes
 internal/readme     README index parse and regeneration
 internal/rename     rename an own skill and fix everything that pointed at it
 internal/config     read/write ~/.config/skillet/config.yml, comments intact

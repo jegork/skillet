@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jegork/skillet/internal/skill"
 )
 
 type Home struct {
@@ -114,6 +116,117 @@ func (h *Home) Readme(rows ...string) string {
 	p := filepath.Join(h.SkillsDir(), "README.md")
 	h.write(p, sb.String())
 	return p
+}
+
+// ProjectDir creates a project root under the home and returns it.
+func (h *Home) ProjectDir(name string) string {
+	dir := filepath.Join(h.Dir, name)
+	h.mkdir(dir)
+	return dir
+}
+
+// ProjectSkill writes a skill with frontmatter into a project's canonical
+// .agents/skills dir and returns the dir.
+func (h *Home) ProjectSkill(project, name, description string) string {
+	return h.ProjectRawSkill(project, name, fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n# %s\n", name, description, name))
+}
+
+// ProjectRawSkill is ProjectSkill with exact SKILL.md content.
+func (h *Home) ProjectRawSkill(project, name, content string) string {
+	dir := filepath.Join(project, ".agents", "skills", name)
+	h.mkdir(dir)
+	h.write(filepath.Join(dir, "SKILL.md"), content)
+	return dir
+}
+
+// ProjectBareSkill writes a skill into a project's bare .claude/skills dir.
+func (h *Home) ProjectBareSkill(project, name, description string) string {
+	dir := filepath.Join(project, ".claude", "skills", name)
+	h.mkdir(dir)
+	h.write(filepath.Join(dir, "SKILL.md"), fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n# %s\n", name, description, name))
+	return dir
+}
+
+// ProjectFile writes an extra file inside a project skill dir.
+func (h *Home) ProjectFile(project, name, rel, content string) string {
+	p := filepath.Join(project, ".agents", "skills", name, rel)
+	h.mkdir(filepath.Dir(p))
+	h.write(p, content)
+	return p
+}
+
+// ProjectStub creates a symlink <project>/<consumerDir>/<name> -> target.
+func (h *Home) ProjectStub(project, consumerDir, name, target string) string {
+	dir := filepath.Join(project, consumerDir)
+	h.mkdir(dir)
+	p := filepath.Join(dir, name)
+	if err := os.Symlink(target, p); err != nil {
+		h.t.Fatal(err)
+	}
+	return p
+}
+
+// ProjectLock writes <project>/skills-lock.json v1 with each entry's
+// computedHash taken from the skill folder as it stands.
+func (h *Home) ProjectLock(project string, entries map[string]string) {
+	hashes := map[string]string{}
+	for name := range entries {
+		dir := filepath.Join(canonicalDir(project), name)
+		if _, err := os.Stat(dir); err != nil {
+			continue
+		}
+		hash, err := skill.ContentHash(dir)
+		if err != nil {
+			h.t.Fatal(err)
+		}
+		hashes[name] = hash
+	}
+	h.ProjectLockWithHashes(project, entries, hashes)
+}
+
+// ProjectLockWithHash is ProjectLock with one explicit computedHash for
+// every entry.
+func (h *Home) ProjectLockWithHash(project, hash string, entries map[string]string) {
+	hashes := map[string]string{}
+	for name := range entries {
+		hashes[name] = hash
+	}
+	h.ProjectLockWithHashes(project, entries, hashes)
+}
+
+// ProjectLockWithHashes writes the lock with explicit per-entry hashes;
+// entries without one get no computedHash.
+func (h *Home) ProjectLockWithHashes(project string, entries, hashes map[string]string) {
+	skills := map[string]any{}
+	for name, source := range entries {
+		e := map[string]any{"source": source, "sourceType": "github", "skillPath": "skills/" + name + "/SKILL.md"}
+		if hash, ok := hashes[name]; ok {
+			e["computedHash"] = hash
+		}
+		skills[name] = e
+	}
+	b, err := json.MarshalIndent(map[string]any{"version": 1, "skills": skills}, "", "  ")
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	h.write(filepath.Join(project, "skills-lock.json"), string(b))
+}
+
+// Config writes the skillet config file.
+func (h *Home) Config(content string) {
+	p := filepath.Join(h.Dir, ".config", "skillet", "config.yml")
+	h.mkdir(filepath.Dir(p))
+	h.write(p, content)
+}
+
+// canonicalDir is a project's canonical skills dir: .agents/skills when the
+// mirror layout is present, .claude/skills otherwise.
+func canonicalDir(project string) string {
+	agents := filepath.Join(project, ".agents", "skills")
+	if info, err := os.Stat(agents); err == nil && info.IsDir() {
+		return agents
+	}
+	return filepath.Join(project, ".claude", "skills")
 }
 
 func (h *Home) mkdir(dir string) {

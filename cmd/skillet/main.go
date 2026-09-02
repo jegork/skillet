@@ -17,6 +17,7 @@ import (
 	"github.com/jegork/skillet/internal/inventory"
 	"github.com/jegork/skillet/internal/readme"
 	"github.com/jegork/skillet/internal/registry"
+	"github.com/jegork/skillet/internal/skill"
 	"github.com/jegork/skillet/internal/store"
 	"github.com/jegork/skillet/internal/store/chezmoi"
 	"github.com/jegork/skillet/internal/store/gitrepo"
@@ -196,13 +197,16 @@ func runDoctor(home string) error {
 	if err != nil {
 		return err
 	}
-	vendored := 0
+	vendored, projects := 0, 0
 	for _, s := range inv.Skills {
 		if s.Origin.Vendored {
 			vendored++
 		}
+		if s.Scope != "" {
+			projects++
+		}
 	}
-	fmt.Printf("%d skills (%d own, %d vendored)\n", len(inv.Skills), len(inv.Skills)-vendored, vendored)
+	fmt.Printf("%d skills (%d own, %d vendored, %d project)\n", len(inv.Skills), len(inv.Skills)-vendored, vendored, projects)
 	for _, c := range inv.Consumers {
 		n := 0
 		for _, on := range inv.Reports[c].Enabled {
@@ -211,6 +215,13 @@ func runDoctor(home string) error {
 			}
 		}
 		fmt.Printf("  %-6s %d enabled\n", c, n)
+	}
+	for _, p := range inv.Projects {
+		unit := "skills"
+		if len(p.Skills) == 1 {
+			unit = "skill"
+		}
+		fmt.Printf("  project %s (%d %s)\n", filepath.Base(p.Root), len(p.Skills), unit)
 	}
 	if len(inv.Findings) == 0 {
 		fmt.Println("doctor: no findings")
@@ -223,7 +234,12 @@ func runDoctor(home string) error {
 			failed = true
 		}
 		subject := f.Skill
-		if subject == "" {
+		if f.Project != "" {
+			subject = filepath.Base(f.Project)
+			if f.Skill != "" {
+				subject += "/" + f.Skill
+			}
+		} else if subject == "" {
 			subject = "(global)"
 		}
 		fmt.Printf("%-5s %-14s %-28s %s\n", f.Severity, f.Check, subject, f.Message)
@@ -239,7 +255,13 @@ func runReadme(home string) error {
 	if err != nil {
 		return err
 	}
-	res, err := readme.Regenerate(inv.Paths.Readme(), inv.Skills)
+	var global []skill.Skill
+	for _, s := range inv.Skills {
+		if s.Scope == "" {
+			global = append(global, s)
+		}
+	}
+	res, err := readme.Regenerate(inv.Paths.Readme(), global)
 	if err != nil {
 		return err
 	}

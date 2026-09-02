@@ -348,7 +348,7 @@ func (m *Model) rebuildItems() tea.Cmd {
 		}
 	} else {
 		for _, g := range groupSkills(m.inv.Skills) {
-			items = append(items, groupItem{key: g.key, children: childNames(g.skills)})
+			items = append(items, groupItem{key: g.key, label: g.label, children: childNames(g.skills)})
 			// collapsed children stay in the list while a filter is active
 			if !m.collapsed[g.key] || m.list.SettingFilter() || m.list.IsFiltered() {
 				for _, s := range g.skills {
@@ -388,10 +388,16 @@ func (m *Model) rebuildItems() tea.Cmd {
 
 func (m *Model) makeItem(s skill.Skill, bySkill map[string][]doctor.Finding) item {
 	enabled := map[string]bool{}
-	for name, rep := range m.inv.Reports {
+	reports := m.inv.Reports
+	if s.Scope != "" {
+		if p := m.projectFor(s.Scope); p != nil {
+			reports = p.Reports
+		}
+	}
+	for name, rep := range reports {
 		enabled[name] = rep.Enabled[s.Name]
 	}
-	return item{skill: s, enabled: enabled, findings: bySkill[s.Name]}
+	return item{skill: s, enabled: enabled, findings: bySkill[findingsKey(s)]}
 }
 
 func childNames(skills []skill.Skill) []string {
@@ -403,10 +409,45 @@ func childNames(skills []skill.Skill) []string {
 }
 
 func owningGroup(s skill.Skill) string {
+	if s.Scope != "" {
+		return s.Scope
+	}
 	if s.Origin.Vendored {
 		return s.Origin.Source
 	}
 	return "own"
+}
+
+// findingsKey scopes a skill's doctor findings so a project skill with a
+// global twin keeps its own row findings.
+func findingsKey(s skill.Skill) string {
+	if s.Scope == "" {
+		return s.Name
+	}
+	return s.Scope + "\x00" + s.Name
+}
+
+// projectFor returns the inventory project a skill belongs to, nil for
+// global skills.
+func (m Model) projectFor(scope string) *inventory.Project {
+	for i := range m.inv.Projects {
+		if m.inv.Projects[i].Root == scope {
+			return &m.inv.Projects[i]
+		}
+	}
+	return nil
+}
+
+// consumersFor returns the consumer adapters for a skill's scope: the
+// global ones for home skills, the owning project's otherwise.
+func (m Model) consumersFor(s skill.Skill) []consumer.Consumer {
+	if s.Scope == "" {
+		return m.cfg.Consumers
+	}
+	if p := m.projectFor(s.Scope); p != nil {
+		return p.Consumers
+	}
+	return nil
 }
 
 func (m Model) selectedName() string {
@@ -488,6 +529,9 @@ func (m Model) skillPreview(it item) string {
 	var b strings.Builder
 	b.WriteString(s.title.Render(it.skill.Name) + "  " + s.faint.Render(it.skill.Origin.String()) + "\n")
 	b.WriteString(s.faint.Render(it.skill.Dir) + "\n")
+	if it.skill.Scope != "" {
+		b.WriteString(s.faint.Render("project "+it.skill.Scope) + "\n")
+	}
 	var seen, hidden []string
 	for _, c := range m.inv.Consumers {
 		if it.enabled[c] {
@@ -525,7 +569,12 @@ func (m Model) doctorReport() string {
 	b.WriteString(m.styles.title.Render("doctor") + "\n\n")
 	for _, f := range m.inv.Findings {
 		subject := f.Skill
-		if subject == "" {
+		if f.Project != "" {
+			subject = filepath.Base(f.Project)
+			if f.Skill != "" {
+				subject += "/" + f.Skill
+			}
+		} else if subject == "" {
 			subject = "global"
 		}
 		b.WriteString(m.dg.severityStyle(f.Severity).Render(pad(f.Severity.String(), 5)) + " " +
@@ -574,7 +623,7 @@ func (m Model) toggle(letter string) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	for _, c := range m.cfg.Consumers {
+	for _, c := range m.consumersFor(it.skill) {
 		if !strings.EqualFold(badge(c.Name()), letter) {
 			continue
 		}
@@ -626,7 +675,7 @@ func (m Model) updateRename(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		newName := strings.TrimSpace(m.renameInput.Value())
 		m.mode = modeList
 		m.renameInput.Blur()
-		rep, err := rename.Rename(m.inv.Paths, m.inv.Skills, m.cfg.Consumers, it.skill.Name, newName)
+		rep, err := rename.Rename(m.inv.Paths, m.inv.Skills, m.consumersFor(it.skill), it.skill.Name, newName)
 		if err != nil {
 			m.flash = "rename: " + err.Error()
 			return m, nil
