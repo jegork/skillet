@@ -27,6 +27,7 @@ import (
 	"github.com/jegork/skillet/internal/rename"
 	"github.com/jegork/skillet/internal/skill"
 	"github.com/jegork/skillet/internal/store"
+	"github.com/jegork/skillet/internal/upstream"
 )
 
 type lipglossStyle = lipgloss.Style
@@ -58,6 +59,8 @@ type Config struct {
 	ConfigPath string                                                             // editable with E; empty disables it
 	Find       func(ctx context.Context, query string) ([]registry.Result, error) // nil disables registry search
 	Install    func(ctx context.Context, source, skill string) error
+	Upstream   func(ctx context.Context, force bool) error // nil disables the upstream check
+	UpdateCmd  func(name string) *exec.Cmd                 // nil disables updating
 }
 type inventoryMsg struct {
 	inv inventory.Inventory
@@ -65,6 +68,22 @@ type inventoryMsg struct {
 }
 type editorDoneMsg struct{ err error }
 type refineDoneMsg struct{ err error }
+
+type upstreamDoneMsg struct {
+	err    error
+	forced bool // u press reports even on success; the startup check stays silent
+}
+type updateDoneMsg struct {
+	err  error
+	name string
+}
+
+// updatedMsg arrives after the rescan + README pass over the updated files.
+type updatedMsg struct {
+	inv  inventory.Inventory
+	err  error
+	name string
+}
 
 type Model struct {
 	cfg    Config
@@ -83,17 +102,18 @@ type Model struct {
 	sync          syncState
 	search        searchState
 
-	status        store.Status
-	statusErr     error
-	statusPending bool
-	flash         string
-	lastSelected  string
-	renameInput   textinput.Model
-	refineAgents  []string
-	selectNext    string // skill to select after the next reload
-	selectGroup   string // group to select after the next rebuild
-	tree          bool   // group skills by origin instead of a flat list
-	collapsed     map[string]bool
+	status          store.Status
+	statusErr       error
+	statusPending   bool
+	flash           string
+	lastSelected    string
+	renameInput     textinput.Model
+	refineAgents    []string
+	selectNext      string // skill to select after the next reload
+	selectGroup     string // group to select after the next rebuild
+	upstreamPending bool
+	tree            bool // group skills by origin instead of a flat list
+	collapsed       map[string]bool
 }
 
 func New(cfg Config) Model {
@@ -121,6 +141,10 @@ func (m Model) Init() tea.Cmd {
 	if m.cfg.Store != nil {
 		cmds = append(cmds, loadStatus(m.cfg.Store))
 	}
+	if m.cfg.Upstream != nil {
+		cmds = append(cmds, m.checkUpstream(false))
+	}
+
 	return tea.Batch(cmds...)
 }
 
@@ -164,6 +188,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.installDone(msg)
 	case installedMsg:
 		return m.installed(msg)
+	case updateDoneMsg:
+		if msg.err != nil {
+			m.flash = "update " + msg.name + ": " + msg.err.Error()
+			return m, m.reload()
+		}
+		return m, m.finishUpdate(msg.name)
+	case updatedMsg:
+		if msg.err != nil {
+			m.flash = "update " + msg.name + ": " + msg.err.Error()
+			return m, m.reload()
+		}
+		m.mode = modeList
+		m.selectNext = msg.name
+		cmd := m.setInventory(msg.inv)
+		m.flash = "updated " + msg.name
+		return m, cmd
+	case upstreamDoneMsg:
+		m.upstreamPending = false
+		if msg.forced {
+			if msg.err != nil {
+				m.flash = "upstream: " + msg.err.Error()
+			} else {
+				m.flash = "upstream checked"
+			}
+		}
+		return m, m.reload()
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
@@ -281,6 +331,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.startRename()
 	case key.Matches(msg, m.keys.Sync):
 		return m.startSync()
+	case key.Matches(msg, m.keys.Upstream):
+		return m, m.checkUpstream(true)
+	case key.Matches(msg, m.keys.Update):
+		return m.updateSkill()
 	case key.Matches(msg, m.keys.Install):
 		return m.startSearch()
 	}
@@ -320,6 +374,64 @@ func (m Model) reload() tea.Cmd {
 		cmds = append(cmds, loadStatus(m.cfg.Store))
 	}
 	return tea.Batch(cmds...)
+}
+
+// checkUpstream refreshes the upstream cache in the background and reloads
+// the inventory when it lands.
+func (m *Model) checkUpstream(force bool) tea.Cmd {
+	if m.cfg.Upstream == nil {
+		return nil
+	}
+	if m.upstreamPending {
+		return nil
+	}
+	m.upstreamPending = true
+	fn := m.cfg.Upstream
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		return upstreamDoneMsg{err: fn(ctx, force), forced: force}
+	}
+}
+
+// updateSkill runs pnpx skills update on an outdated vendored skill through
+// tea.ExecProcess, so its output is visible while the TUI is suspended.
+func (m Model) updateSkill() (tea.Model, tea.Cmd) {
+	it, ok := m.list.SelectedItem().(item)
+	if !ok {
+		return m, nil
+	}
+	if m.cfg.UpdateCmd == nil {
+		m.flash = "update not configured"
+		return m, nil
+	}
+	if !it.skill.Origin.Vendored || it.skill.Scope != "" {
+		m.flash = "update: only global vendored skills"
+		return m, nil
+	}
+	if m.inv.Upstream[it.skill.Name].State != upstream.Outdated {
+		m.flash = it.skill.Name + ": not outdated, or upstream unknown (press u)"
+		return m, nil
+	}
+	name := it.skill.Name
+	return m, tea.ExecProcess(m.cfg.UpdateCmd(name), func(err error) tea.Msg { return updateDoneMsg{err: err, name: name} })
+}
+
+// finishUpdate rescans and regenerates the README over the updated files,
+// like the install flow; drift and the upstream marker follow on the reload.
+func (m Model) finishUpdate(name string) tea.Cmd {
+	load := m.cfg.Load
+	paths := m.inv.Paths
+	return func() tea.Msg {
+		inv, err := load()
+		if err != nil {
+			return updatedMsg{err: err, name: name}
+		}
+		if _, err := readme.Regenerate(paths.Readme(), inv.Skills); err != nil {
+			return updatedMsg{inv: inv, err: fmt.Errorf("README: %w", err), name: name}
+		}
+		return updatedMsg{inv: inv, name: name}
+	}
 }
 
 func (m *Model) setInventory(inv inventory.Inventory) tea.Cmd {
@@ -397,7 +509,7 @@ func (m *Model) makeItem(s skill.Skill, bySkill map[string][]doctor.Finding) ite
 	for name, rep := range reports {
 		enabled[name] = rep.Enabled[s.Name]
 	}
-	return item{skill: s, enabled: enabled, findings: bySkill[findingsKey(s)]}
+	return item{skill: s, enabled: enabled, findings: bySkill[findingsKey(s)], upstream: m.inv.Upstream[s.Name].State}
 }
 
 func childNames(skills []skill.Skill) []string {
@@ -490,12 +602,11 @@ func (m *Model) refreshPreview() {
 	case modeDoctor:
 		m.preview.SetContent(m.doctorReport())
 	default:
-		switch sel := m.list.SelectedItem().(type) {
-		case item:
-			m.preview.SetContent(m.wrap(m.skillPreview(sel)))
-		case groupItem:
-			m.preview.SetContent(m.wrap(m.groupPreview(sel)))
-		default:
+		if it, ok := m.list.SelectedItem().(item); ok {
+			m.preview.SetContent(m.wrap(m.skillPreview(it)))
+		} else if g, ok := m.list.SelectedItem().(groupItem); ok {
+			m.preview.SetContent(m.wrap(m.groupPreview(g)))
+		} else {
 			m.preview.SetContent(m.styles.faint.Render("no skill selected"))
 		}
 	}
@@ -545,6 +656,19 @@ func (m Model) skillPreview(it item) string {
 		b.WriteString(s.faint.Render("  hidden from " + strings.Join(hidden, ", ")))
 	}
 	b.WriteString("\n")
+	if it.skill.Origin.Vendored && it.skill.Scope == "" {
+		info := m.inv.Upstream[it.skill.Name]
+		switch info.State {
+		case upstream.Outdated:
+			b.WriteString("\n" + s.warn.Render("upstream has changes") + "\n")
+			b.WriteString(s.faint.Render("lock     "+info.Lock) + "\n")
+			b.WriteString(s.faint.Render("upstream "+info.Upstream) + "\n")
+		case upstream.Current:
+			b.WriteString("\n" + s.ok.Render("up to date with upstream") + "\n")
+		default:
+			b.WriteString("\n" + s.faint.Render("upstream: unknown (press u to check)") + "\n")
+		}
+	}
 	if len(it.findings) > 0 {
 		b.WriteString("\n")
 		for _, f := range it.findings {

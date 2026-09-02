@@ -53,7 +53,7 @@ func TestPad(t *testing.T) {
 func TestLayoutFitsWidth(t *testing.T) {
 	for _, w := range []int{40, 60, 80, 120, 200} {
 		c := layout(w, 3)
-		total := 2 + c.name + 1 + c.origin + 1 + c.consumers + 1 + c.doctor + 1 + c.modified
+		total := 2 + c.name + 1 + c.origin + 1 + c.upd + 1 + c.consumers + 1 + c.doctor + 1 + c.modified
 		if c.description > 0 {
 			total += 1 + c.description
 		}

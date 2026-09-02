@@ -24,6 +24,7 @@ skillet status        # store drift: uncaptured, uncommitted, ahead
 skillet readme        # regenerate the README index
 skillet install owner/repo [--skill NAME]
                       # install from skills.sh via pnpx skills
+skillet outdated      # vendored skills with upstream changes
 skillet store init    # create the git store repo (--git-dir, --remote)
 skillet config        # path, get/set keys, edit in $EDITOR
 ```
@@ -69,7 +70,9 @@ skillet config edit
 | `←` `→` | collapse / expand a group (also `enter` / `space` on a group row) |
 | `e` `enter` | open `SKILL.md` in `$VISUAL` / `$EDITOR` (own skills only) |
 | `E` | open the config file in `$VISUAL` / `$EDITOR` |
-| `c` `x` `o` | toggle visibility for claude / codex / omp |
+| `d` | doctor report |
+| `u` | check upstream: fetch the repos in the lock and mark outdated skills |
+| `U` | update the picked vendored skill with `pnpx skills update` (outdated only) |
 | `n` | rename (own only): dir, frontmatter, cross-references, stubs, README row |
 | `p` | refine (own only): pick claude / omp / codex and launch it on the skill with a prefilled message |
 | `s` | capture into the store, review the diff, commit, push |
@@ -100,15 +103,22 @@ folder, and a skills dir whose content hash differs from the project lock's
 `computedHash`. Sync stays global-only for now.
 
 Columns: origin (`own` or `vend owner/repo` from `~/.agents/.skill-lock.json`,
-project skills suffixed ` @project`), consumer badges (`C` claude, `X` codex,
-`O` omp), doctor finding count, last modified.
+project skills suffixed ` @project`), `upd` marker when the upstream repo has
+newer changes than the lock (press `U` to update), consumer badges (`C` claude,
+`X` codex, `O` omp), doctor finding count, last modified.
 
 Doctor checks: broken consumer stubs, cross-references to unknown skills,
 stale README rows, lock entries without a folder, missing SKILL.md or
 description, vendored folders whose git tree hash differs from the lock
-(info only, since `pnpx skills` rewrites some frontmatter on install), and —
+(info only, since `pnpx skills` rewrites some frontmatter on install), skills
+whose upstream repo moved since the lock was written (info), and —
 for project skills — shadowed global names, broken project stubs, project
 lock orphans and project skills dir drift against `computedHash`.
+
+The upstream check asks GitHub for one recursive tree per repo (token from
+`gh auth token` when available, anonymous otherwise) and caches the folder
+hashes in `~/.cache/skillet/upstream.json` for an hour. Offline or rate
+limited: skills read as "unknown" and the last cache stays.
 
 ## Layout
 
@@ -125,6 +135,7 @@ internal/store      Store interface: Status / Capture / Diff / Commit / Push
 internal/store/chezmoi
 internal/store/gitrepo
 internal/ui         bubbletea front end
+internal/upstream   upstream update checks: GitHub trees, ~/.cache/skillet/upstream.json
 internal/registry   search skills.sh and install through pnpx skills
 ```
 
