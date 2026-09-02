@@ -10,6 +10,7 @@ import (
 	"github.com/jegork/skillet/internal/doctor"
 	"github.com/jegork/skillet/internal/project"
 	"github.com/jegork/skillet/internal/skill"
+	"github.com/jegork/skillet/internal/upstream"
 )
 
 type Inventory struct {
@@ -19,6 +20,7 @@ type Inventory struct {
 	Consumers []string
 	Reports   map[string]consumer.Report
 	Projects  []Project
+	Upstream  map[string]upstream.Info // nil when the cache has no data yet
 	Findings  []doctor.Finding
 }
 
@@ -50,6 +52,9 @@ func Load(home string) (Inventory, error) {
 	if inv.Skills, err = skill.Scan(inv.Paths.SkillsDir(), inv.Lock); err != nil {
 		return inv, err
 	}
+	// local cache read only: the network check runs separately in the background
+	inv.Upstream = upstream.Evaluate(inv.Lock, upstream.ReadCache(upstream.Path(home)))
+
 	for _, c := range Consumers(home) {
 		rep, err := c.Report(inv.Skills)
 		if err != nil {
@@ -84,7 +89,7 @@ func Load(home string) (Inventory, error) {
 		projectInputs = append(projectInputs, input)
 		inv.Skills = append(inv.Skills, pj.Skills...)
 	}
-	inv.Findings = doctor.Run(doctor.Input{Paths: inv.Paths, Skills: inv.Skills, Lock: inv.Lock, Reports: inv.Reports, Projects: projectInputs})
+	inv.Findings = doctor.Run(doctor.Input{Paths: inv.Paths, Skills: inv.Skills, Lock: inv.Lock, Reports: inv.Reports, Upstream: inv.Upstream, Projects: projectInputs})
 	return inv, nil
 }
 

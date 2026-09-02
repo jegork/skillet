@@ -6,6 +6,7 @@ type keyMap struct {
 	Up, Down, Filter, Edit, Refine, Sync, Doctor, Reload, Readme, Focus, Help, Quit, Back key.Binding
 	Confirm, TogglePush, Install, Config                                                  key.Binding
 	Toggle, Rename, Move                                                                  key.Binding
+	Upstream, Update                                                                      key.Binding
 	Tree, Collapse, Expand                                                                key.Binding
 }
 
@@ -24,6 +25,8 @@ func newKeyMap() keyMap {
 		Readme:     key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "regenerate README index")),
 		Config:     key.NewBinding(key.WithKeys("E"), key.WithHelp("E", "edit config")),
 		Refine:     key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "refine (own only)")),
+		Upstream:   key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "check upstream")),
+		Update:     key.NewBinding(key.WithKeys("U"), key.WithHelp("U", "update outdated skill")),
 		Toggle:     key.NewBinding(key.WithKeys("c", "x", "o"), key.WithHelp("c/x/o", "toggle claude/codex/omp")),
 		Focus:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "focus preview")),
 		Help:       key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
@@ -38,13 +41,13 @@ func newKeyMap() keyMap {
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Edit, k.Refine, k.Toggle, k.Sync, k.Install, k.Filter, k.Tree, k.Config, k.Doctor, k.Help, k.Quit}
+	return []key.Binding{k.Edit, k.Refine, k.Toggle, k.Sync, k.Install, k.Filter, k.Tree, k.Config, k.Doctor, k.Upstream, k.Help, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Filter, k.Tree, k.Focus},
-		{k.Edit, k.Refine, k.Toggle, k.Rename, k.Move, k.Sync, k.Install, k.Doctor, k.Reload, k.Readme},
+		{k.Edit, k.Refine, k.Toggle, k.Rename, k.Move, k.Sync, k.Install, k.Doctor, k.Reload, k.Readme, k.Upstream, k.Update},
 		{k.Help, k.Back, k.Quit},
 	}
 }
