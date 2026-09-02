@@ -75,7 +75,7 @@ func Move(in Input, s skill.Skill, targetRoot string) error {
 	// can create a shadow, the global copy is what leaves when moving home
 	if !tgtGlobal && !srcGlobal {
 		for _, g := range in.Skills {
-			if g.Name == s.Name {
+			if g.Scope == "" && g.Name == s.Name {
 				return fmt.Errorf("moving %q into %s would shadow the global skill of the same name", s.Name, scopeName(targetRoot))
 			}
 		}

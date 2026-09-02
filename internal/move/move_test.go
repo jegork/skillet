@@ -412,3 +412,31 @@ func TestMoveOwnIntoProjectKeepsBothConsumers(t *testing.T) {
 		}
 	}
 }
+
+// a project to project move with no global twin must not be refused: the
+// shadow check is about global skills, and the flat list also holds the
+// skill being moved itself
+func TestMoveBetweenProjects(t *testing.T) {
+	h := testhome.New(t)
+	h.Config("projects:\n  roots: [" + h.Dir + "/src]\n")
+	src := h.ProjectDir("src/alpha")
+	dst := h.ProjectDir("src/beta")
+	h.ProjectSkill(src, "shared", "shared things")
+	h.ProjectStub(src, ".claude/skills", "shared", "../../.agents/skills/shared")
+	h.ProjectSkill(dst, "other", "other things")
+
+	in, inv := load(t, h)
+	s := projectSkill(inv, src, "shared")
+	if err := move.Move(in, s, dst); err != nil {
+		t.Fatalf("cross-project move refused: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, ".agents", "skills", "shared", "SKILL.md")); err != nil {
+		t.Errorf("skill not in target project: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(src, ".agents", "skills", "shared")); !os.IsNotExist(err) {
+		t.Error("skill still in source project")
+	}
+	if link, err := os.Readlink(filepath.Join(dst, ".claude", "skills", "shared")); err != nil || link != "../../.agents/skills/shared" {
+		t.Errorf("target claude stub -> %q, %v", link, err)
+	}
+}
