@@ -33,7 +33,10 @@ homebrew_casks:
   - repository:
       owner: jegork
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      # pushed over ssh with a write deploy key of the tap repo, no PAT needed
+      git:
+        url: git@github.com:jegork/homebrew-tap.git
+        private_key: "{{ .Env.HOMEBREW_TAP_SSH_KEY }}"
     homepage: https://github.com/jegork/skillet
     description: Terminal UI for managing agent skills across Claude Code, Codex and omp
     license: MIT
