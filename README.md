@@ -22,6 +22,8 @@ skillet               # the TUI
 skillet doctor        # findings as text, exit 1 on errors
 skillet status        # store drift: uncaptured, uncommitted, ahead
 skillet readme        # regenerate the README index
+skillet install owner/repo [--skill NAME]
+                      # install from skills.sh via pnpx skills
 skillet store init    # create the git store repo (--git-dir, --remote)
 skillet config        # path, get/set keys, edit in $EDITOR
 ```
@@ -73,6 +75,7 @@ skillet config edit
 | `s` | capture into the store, review the diff, commit, push |
 | `d` | doctor report |
 | `R` | regenerate the README index, keeping its hand-made sections |
+| `i` | search skills.sh, `enter` installs the picked skill via `pnpx skills` |
 | `r` | rescan |
 | `tab` | scroll the preview |
 | `?` | help |
@@ -107,6 +110,7 @@ internal/store      Store interface: Status / Capture / Diff / Commit / Push
 internal/store/chezmoi
 internal/store/gitrepo
 internal/ui         bubbletea front end
+internal/registry   search skills.sh and install through pnpx skills
 ```
 
 The chezmoi store only ever adds children of a tracked root, never the root
@@ -119,7 +123,6 @@ git operation is pathspec-scoped to those roots, so nothing else in `$HOME` is
 ever staged, diffed, committed or pushed.
 
 ## Develop
-
 ```sh
 task test             # chezmoi integration tests run when chezmoi is on PATH
 task lint
