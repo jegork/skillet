@@ -25,11 +25,41 @@ skillet readme        # regenerate the README index
 skillet install owner/repo [--skill NAME]
                       # install from skills.sh via pnpx skills
 skillet store init    # create the git store repo (--git-dir, --remote)
+skillet config        # path, get/set keys, edit in $EDITOR
 ```
 
 `--store git` selects the plain git backend: a repo whose worktree is `$HOME`
 with its git dir at `~/.agents/.skillet-store.git`, tracking only the store
 roots. Create it once with `skillet store init [--git-dir DIR] [--remote URL]`.
+`--store` and the git store dir/remote come from the config when the flag is
+absent: flag, then config, then built-in default. `skillet store init` writes
+the git dir and remote it used back into the config.
+
+## Config
+
+`~/.config/skillet/config.yml` (respects `$XDG_CONFIG_HOME`), edited with
+`skillet config edit` or the `E` key in the TUI. Comments survive
+`skillet config set`. A missing file keeps the built-in defaults.
+
+```yaml
+store: chezmoi            # or git
+git_store:
+  dir: ~/.agents/.skillet-store.git
+  remote: git@github.com:you/skills-store.git
+projects:
+  roots: [~/Documents/projects, ~/orca/workspaces/*]   # dirs whose children are probed
+  paths: []                                             # explicit extra projects
+```
+
+Keys: `store`, `git_store.dir`, `git_store.remote`, `projects.roots`,
+`projects.paths`. Leading `~` expands to the managed home.
+
+```sh
+skillet config path                          # where the file lives
+skillet config get [key]                     # one key or the whole file
+skillet config set projects.roots ~/a ~/b    # repeatable values for lists
+skillet config edit
+```
 
 | key | action |
 |---|---|
@@ -38,6 +68,7 @@ roots. Create it once with `skillet store init [--git-dir DIR] [--remote URL]`.
 | `t` | toggle between the flat list and the tree grouped by origin |
 | `←` `→` | collapse / expand a group (also `enter` / `space` on a group row) |
 | `e` `enter` | open `SKILL.md` in `$VISUAL` / `$EDITOR` (own skills only) |
+| `E` | open the config file in `$VISUAL` / `$EDITOR` |
 | `c` `x` `o` | toggle visibility for claude / codex / omp |
 | `n` | rename (own only): dir, frontmatter, cross-references, stubs, README row |
 | `p` | refine (own only): pick claude / omp / codex and launch it on the skill with a prefilled message |
@@ -74,6 +105,7 @@ internal/consumer   which tool sees which skill (symlink dirs, omp ignore globs)
 internal/doctor     dangling stubs, unknown cross-references, stale README, lock orphans, drift
 internal/readme     README index parse and regeneration
 internal/rename     rename an own skill and fix everything that pointed at it
+internal/config     read/write ~/.config/skillet/config.yml, comments intact
 internal/store      Store interface: Status / Capture / Diff / Commit / Push
 internal/store/chezmoi
 internal/store/gitrepo

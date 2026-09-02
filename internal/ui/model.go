@@ -51,14 +51,14 @@ const (
 )
 
 type Config struct {
-	Inventory inventory.Inventory
-	Load      func() (inventory.Inventory, error)
-	Store     store.Store // nil disables sync
-	Consumers []consumer.Consumer
-	Find      func(ctx context.Context, query string) ([]registry.Result, error) // nil disables registry search
-	Install   func(ctx context.Context, source, skill string) error
+	Inventory  inventory.Inventory
+	Load       func() (inventory.Inventory, error)
+	Store      store.Store // nil disables sync
+	Consumers  []consumer.Consumer
+	ConfigPath string                                                             // editable with E; empty disables it
+	Find       func(ctx context.Context, query string) ([]registry.Result, error) // nil disables registry search
+	Install    func(ctx context.Context, source, skill string) error
 }
-
 type inventoryMsg struct {
 	inv inventory.Inventory
 	err error
@@ -271,6 +271,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case key.Matches(msg, m.keys.Edit):
 		return m.edit()
+	case key.Matches(msg, m.keys.Config):
+		return m.editConfig()
 	case key.Matches(msg, m.keys.Toggle):
 		return m.toggle(msg.String())
 	case key.Matches(msg, m.keys.Refine):
@@ -541,6 +543,20 @@ func (m Model) edit() (tea.Model, tea.Cmd) {
 		m.flash = it.skill.Origin.String() + ": edit disabled, pnpx skills owns this one"
 		return m, nil
 	}
+	return m, tea.ExecProcess(editorCmd(filepath.Join(it.skill.Dir, "SKILL.md")), func(err error) tea.Msg { return editorDoneMsg{err} })
+}
+
+// editConfig opens the config file in $VISUAL/$EDITOR.
+func (m Model) editConfig() (tea.Model, tea.Cmd) {
+	if m.cfg.ConfigPath == "" {
+		m.flash = "config: no file to edit"
+		return m, nil
+	}
+	return m, tea.ExecProcess(editorCmd(m.cfg.ConfigPath), func(err error) tea.Msg { return editorDoneMsg{err} })
+}
+
+// editorCmd runs the editor through sh so multi-word values like "code -w" work.
+func editorCmd(path string) *exec.Cmd {
 	editor := os.Getenv("VISUAL")
 	if editor == "" {
 		editor = os.Getenv("EDITOR")
@@ -548,8 +564,7 @@ func (m Model) edit() (tea.Model, tea.Cmd) {
 	if editor == "" {
 		editor = "vi"
 	}
-	c := exec.Command("sh", "-c", editor+` "$1"`, "sh", filepath.Join(it.skill.Dir, "SKILL.md"))
-	return m, tea.ExecProcess(c, func(err error) tea.Msg { return editorDoneMsg{err} })
+	return exec.Command("sh", "-c", editor+` "$1"`, "sh", path)
 }
 
 // toggle flips the selected skill's visibility for the consumer whose badge

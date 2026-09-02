@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.0](https://github.com/jegork/skillet/compare/v0.2.0...v0.3.0) (2026-09-02)
+
+
+### Features
+
+* **config:** config file with get/set/edit ([#15](https://github.com/jegork/skillet/issues/15)) ([662149d](https://github.com/jegork/skillet/commit/662149dddb5b06c2c16428d61f6cff9da5160ffd)), closes [#11](https://github.com/jegork/skillet/issues/11)
+* **doctor:** flag own skills with vendor markers missing from the lock ([ce6c0b2](https://github.com/jegork/skillet/commit/ce6c0b27945832aefb997f6af9c389a70c2630f3))
+* refine an own skill in claude/omp/codex with a prefilled prompt ([#8](https://github.com/jegork/skillet/issues/8)) ([55babed](https://github.com/jegork/skillet/commit/55babed762f5ff7e39a7128d109d3f7957a78d63))
+* **store:** add plain git store backend ([3c9883e](https://github.com/jegork/skillet/commit/3c9883e01092fee4fc0340f32004e6d8d5836d93))
+* **store:** add plain git store backend ([b48ac3e](https://github.com/jegork/skillet/commit/b48ac3ec2fe57293636bc32d4200b1a726d60558))
+* **ui:** tree view grouping skills by vendor ([72abeca](https://github.com/jegork/skillet/commit/72abecafe3468e2850a7e184e7e41804c538a047))
+* **ui:** tree view grouping skills by vendor ([47c44ae](https://github.com/jegork/skillet/commit/47c44aef20e7080827e401c0ab3491b9741c59e4))
+
+
+### Bug Fixes
+
+* **ui:** restore q/ctrl+c quit and the filter row lost in the tree view change ([af15ce3](https://github.com/jegork/skillet/commit/af15ce3ee4ec044520e8969de8b10b725169c066))
+
 ## [0.2.0](https://github.com/jegork/skillet/compare/v0.1.0...v0.2.0) (2026-09-01)
 
 
