@@ -27,6 +27,19 @@ archives:
 checksum:
   name_template: checksums.txt
 
+brews:
+  - repository:
+      owner: jegork
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/jegork/skillet
+    description: Terminal UI for managing agent skills across Claude Code, Codex and omp
+    license: MIT
+    install: bin.install "skillet"
+    test: system "#{bin}/skillet", "--version"
+    commit_msg_template: "chore: skillet {{ .Tag }}"
+
 # release-please owns the notes and the GitHub release; goreleaser only
 # attaches the binaries
 changelog:

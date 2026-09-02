@@ -10,7 +10,8 @@ directly. Two backends: `chezmoi` (default) or `git`.
 ## Install
 
 ```sh
-task install          # builds to ~/.local/bin/skillet
+brew install jegork/tap/skillet   # macOS and Linux, follows releases
+task install                      # from source, builds to ~/.local/bin/skillet
 ```
 
 Releases are cut by Release Please: merging its release PR tags the version,
