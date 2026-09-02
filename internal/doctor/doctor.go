@@ -147,21 +147,27 @@ func projectLockOrphans(p ProjectInput, name string) []Finding {
 	return out
 }
 
-// projectDrift compares the mirror skills dir with the computedHash the
-// project lock recorded; the bare layout has no lock hash to check.
+// projectDrift compares each project skill folder with the computedHash its
+// skills-lock.json entry recorded. Info only, like the global drift check.
 func projectDrift(p ProjectInput, name string) []Finding {
 	var out []Finding
-	if p.Lock.Missing || p.Lock.ComputedHash == "" {
+	if p.Lock.Missing {
 		return out
 	}
-	hash, err := skill.ContentHash(p.SkillsDir)
-	if err != nil {
-		out = append(out, Finding{"drift", "", p.Root, Warn, name + ": " + err.Error()})
-		return out
-	}
-	if hash != p.Lock.ComputedHash {
-		out = append(out, Finding{"drift", "", p.Root, Warn,
-			name + ": skills dir differs from skills-lock.json computedHash"})
+	for _, s := range p.Skills {
+		entry, ok := p.Lock.Skills[s.Name]
+		if !ok || entry.ComputedHash == "" {
+			continue
+		}
+		hash, err := skill.ContentHash(s.Dir)
+		if err != nil {
+			out = append(out, Finding{"drift", s.Name, p.Root, Warn, name + ": " + err.Error()})
+			continue
+		}
+		if hash != entry.ComputedHash {
+			out = append(out, Finding{"drift", s.Name, p.Root, Info,
+				name + ": folder differs from skills-lock.json computedHash: edited locally, or the lock is stale"})
+		}
 	}
 	return out
 }

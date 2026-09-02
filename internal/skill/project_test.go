@@ -15,7 +15,7 @@ func TestReadProjectLockMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !lock.Missing || len(lock.Skills) != 0 || lock.ComputedHash != "" {
+	if !lock.Missing || len(lock.Skills) != 0 {
 		t.Errorf("missing lock must load as zero, got %+v", lock)
 	}
 }
@@ -39,7 +39,7 @@ func TestReadProjectLockParses(t *testing.T) {
 	if lock.Skills["web-perf"].Source != "buildfind/agent-skills" {
 		t.Errorf("skills = %v", lock.Skills)
 	}
-	if lock.ComputedHash == "" {
+	if lock.Skills["web-perf"].ComputedHash == "" {
 		t.Error("computedHash empty")
 	}
 }
@@ -116,5 +116,39 @@ func TestContentHashIgnoresSymlinks(t *testing.T) {
 func TestContentHashMissingDir(t *testing.T) {
 	if _, err := skill.ContentHash(filepath.Join(os.TempDir(), "skillet-nope")); err == nil {
 		t.Error("expected an error for a missing dir")
+	}
+}
+
+// the vector comes from the algorithm validated against a real
+// skills-lock.json: plain concatenation, case-insensitive path order
+func TestContentHashMatchesSkillsCLI(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"SKILL.md":            "---\nname: x\n---\n",
+		"references/Notes.md": "n",
+		"references/a.md":     "a",
+		"scripts/run.sh":      "#!/bin/sh\n",
+	}
+	for rel, content := range files {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "node_modules", "x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "node_modules", "x", "ignored.js"), []byte("nope"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := skill.ContentHash(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "f7745d966e4e14317ac7fc136676f7f9ba50daa95997697b56c67713daa7fed6"; got != want {
+		t.Errorf("ContentHash = %s, want %s", got, want)
 	}
 }

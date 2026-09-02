@@ -113,7 +113,7 @@ func TestProjectLockOrphanAndDrift(t *testing.T) {
 	fs := runWith(t, h, projectInput(t, h, mirror))
 	expect(t, fs,
 		key{"lock-orphan", "", doctor.Warn},
-		key{"drift", "", doctor.Warn},
+		key{"drift", "a-skill", doctor.Info},
 	)
 }
 
@@ -125,7 +125,7 @@ func TestProjectDriftQuietWhenHashMatches(t *testing.T) {
 	h.ProjectLock(mirror, map[string]string{"a-skill": "acme/repo"})
 	h.ProjectFile(mirror, "a-skill", "extra.md", "more\n")
 	// re-lock at current content
-	hash, err := skill.ContentHash(filepath.Join(mirror, ".agents", "skills"))
+	hash, err := skill.ContentHash(filepath.Join(mirror, ".agents", "skills", "a-skill"))
 	if err != nil {
 		t.Fatal(err)
 	}

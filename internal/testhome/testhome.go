@@ -166,23 +166,46 @@ func (h *Home) ProjectStub(project, consumerDir, name, target string) string {
 	return p
 }
 
-// ProjectLock writes <project>/skills-lock.json v1, hashing the project's
-// canonical skills dir as it stands.
+// ProjectLock writes <project>/skills-lock.json v1 with each entry's
+// computedHash taken from the skill folder as it stands.
 func (h *Home) ProjectLock(project string, entries map[string]string) {
-	hash, err := skill.ContentHash(canonicalDir(project))
-	if err != nil {
-		h.t.Fatal(err)
+	hashes := map[string]string{}
+	for name := range entries {
+		dir := filepath.Join(canonicalDir(project), name)
+		if _, err := os.Stat(dir); err != nil {
+			continue
+		}
+		hash, err := skill.ContentHash(dir)
+		if err != nil {
+			h.t.Fatal(err)
+		}
+		hashes[name] = hash
 	}
-	h.ProjectLockWithHash(project, hash, entries)
+	h.ProjectLockWithHashes(project, entries, hashes)
 }
 
-// ProjectLockWithHash is ProjectLock with an explicit computedHash.
+// ProjectLockWithHash is ProjectLock with one explicit computedHash for
+// every entry.
 func (h *Home) ProjectLockWithHash(project, hash string, entries map[string]string) {
+	hashes := map[string]string{}
+	for name := range entries {
+		hashes[name] = hash
+	}
+	h.ProjectLockWithHashes(project, entries, hashes)
+}
+
+// ProjectLockWithHashes writes the lock with explicit per-entry hashes;
+// entries without one get no computedHash.
+func (h *Home) ProjectLockWithHashes(project string, entries, hashes map[string]string) {
 	skills := map[string]any{}
 	for name, source := range entries {
-		skills[name] = map[string]any{"source": source, "sourceType": "github"}
+		e := map[string]any{"source": source, "sourceType": "github", "skillPath": "skills/" + name + "/SKILL.md"}
+		if hash, ok := hashes[name]; ok {
+			e["computedHash"] = hash
+		}
+		skills[name] = e
 	}
-	b, err := json.MarshalIndent(map[string]any{"version": 1, "computedHash": hash, "skills": skills}, "", "  ")
+	b, err := json.MarshalIndent(map[string]any{"version": 1, "skills": skills}, "", "  ")
 	if err != nil {
 		h.t.Fatal(err)
 	}
