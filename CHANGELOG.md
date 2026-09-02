@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0](https://github.com/jegork/skillet/compare/v0.3.0...v0.4.0) (2026-09-02)
+
+
+### Features
+
+* discover project-level skills from configured roots ([#18](https://github.com/jegork/skillet/issues/18)) ([c89e605](https://github.com/jegork/skillet/commit/c89e605cd029db2f1108d39dbb500c3738493db8)), closes [#12](https://github.com/jegork/skillet/issues/12)
+* move skills between global and project scope ([#19](https://github.com/jegork/skillet/issues/19)) ([bc62378](https://github.com/jegork/skillet/commit/bc623786bb514808ee34996a2a5586529b289d21))
+* search and install skills from registries ([#16](https://github.com/jegork/skillet/issues/16)) ([06152d8](https://github.com/jegork/skillet/commit/06152d87bd14de3fb234dc90929d2ded3a774da1)), closes [#3](https://github.com/jegork/skillet/issues/3)
+* show which vendored skills have upstream updates ([#20](https://github.com/jegork/skillet/issues/20)) ([c7165d5](https://github.com/jegork/skillet/commit/c7165d51afd7674e1d27915bc464a91acd5ff07e)), closes [#13](https://github.com/jegork/skillet/issues/13)
+
+
+### Bug Fixes
+
+* **config:** honour XDG_CONFIG_HOME only for the real user home ([b1747b3](https://github.com/jegork/skillet/commit/b1747b3a2ceea5400c070ff9be1546524f6f5baf))
+
 ## [0.3.0](https://github.com/jegork/skillet/compare/v0.2.0...v0.3.0) (2026-09-02)
 
 
