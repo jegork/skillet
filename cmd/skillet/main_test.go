@@ -196,3 +196,60 @@ func TestRunOutdatedQuietWhenUpToDateOrOffline(t *testing.T) {
 		t.Errorf("offline home printed %q", out.String())
 	}
 }
+
+func TestRunRemoveOwnGlobal(t *testing.T) {
+	h := testhome.New(t)
+	h.Skill("alpha", "does alpha things")
+	h.Skill("beta", "does beta things")
+	h.Stub(".claude/skills", "alpha", "../../.agents/skills/alpha")
+	h.OmpIgnore("alpha")
+	h.Readme("| `alpha` | own | does alpha things |", "| `beta` | own | does beta things |")
+	out := captureStdout(t, func() {
+		if err := runRemove(h.Dir, []string{"alpha", "-y"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(out.String(), "removed alpha") {
+		t.Errorf("output %q", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(h.SkillsDir(), "alpha")); !os.IsNotExist(err) {
+		t.Error("skill dir still there")
+	}
+	if _, err := os.Lstat(filepath.Join(h.Dir, ".claude", "skills", "alpha")); !os.IsNotExist(err) {
+		t.Error("claude stub still there")
+	}
+}
+
+func TestRunRemoveProjectScope(t *testing.T) {
+	h := testhome.New(t)
+	h.Config("projects:\n  roots: [" + h.Dir + "/src]\n")
+	root := h.ProjectDir("src/proj")
+	h.ProjectSkill(root, "alpha", "does alpha things")
+	h.ProjectLock(root, map[string]string{"alpha": "own"})
+	out := captureStdout(t, func() {
+		if err := runRemove(h.Dir, []string{"alpha", "--project", root, "-y"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(out.String(), "removed alpha") {
+		t.Errorf("output %q", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, ".agents", "skills", "alpha")); !os.IsNotExist(err) {
+		t.Error("project skill dir still there")
+	}
+	lock, err := os.ReadFile(filepath.Join(root, "skills-lock.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(lock), `"alpha"`) {
+		t.Errorf("project lock entry still there:\n%s", lock)
+	}
+}
+
+func TestRunRemoveRefusesUnknownProject(t *testing.T) {
+	h := testhome.New(t)
+	err := runRemove(h.Dir, []string{"alpha", "--project", filepath.Join(h.Dir, "nowhere")})
+	if err == nil || !strings.Contains(err.Error(), "no project with skills") {
+		t.Fatalf("want refusal, got %v", err)
+	}
+}
