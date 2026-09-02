@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/jegork/skillet/internal/store/chezmoi"
 	"github.com/jegork/skillet/internal/store/gitrepo"
 	"github.com/jegork/skillet/internal/ui"
+	"github.com/jegork/skillet/internal/upstream"
 )
 
 var version = "dev"
@@ -49,7 +51,7 @@ func main() {
 	})
 	showVersion := fs.Bool("version", false, "print version")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [--store chezmoi|git] [config|doctor|status|readme|install|store init]")
+		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [--store chezmoi|git] [config|doctor|status|readme|install|outdated|store init]")
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(os.Args[1:])
@@ -75,6 +77,8 @@ func main() {
 		err = runStatus(home, newStore(storeName, home, cfg.GitStore.Dir))
 	case "readme":
 		err = runReadme(home)
+	case "outdated":
+		err = runOutdated(home, &upstream.GitHub{})
 	case "install":
 		err = runInstall(home, fs.Args()[1:])
 	case "store":
@@ -117,6 +121,16 @@ func runTUI(home string, st store.Store, cfgPath string) error {
 		Find:       registry.Find,
 		Install: func(ctx context.Context, source, skill string) error {
 			return registry.Add(ctx, home, source, skill)
+		},
+		Upstream: func(ctx context.Context, force bool) error {
+			lock, err := skill.ReadLock(skill.Paths{Home: home}.LockFile())
+			if err != nil {
+				return err
+			}
+			return upstream.Refresh(ctx, upstream.Path(home), lock, &upstream.GitHub{}, force)
+		},
+		UpdateCmd: func(name string) *exec.Cmd {
+			return registry.UpdateCmd(home, name)
 		},
 	})
 	_, err = tea.NewProgram(m).Run()
@@ -288,6 +302,34 @@ func runStatus(home string, st store.Store) error {
 	fmt.Printf("uncommitted: %d\n", len(status.Uncommitted))
 	if len(status.Uncommitted) > 0 {
 		fmt.Println("  " + strings.Join(status.Uncommitted, "\n  "))
+	}
+	return nil
+}
+
+// runOutdated prints vendored skills whose upstream repo moved since the
+// lock was written, one tab-separated name/source pair per line. Offline or
+// rate limited repos fall back to the cache, so the list degrades to the
+// last known state instead of failing.
+func runOutdated(home string, f upstream.Fetcher) error {
+	inv, err := inventory.Load(home)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := upstream.Refresh(ctx, upstream.Path(home), inv.Lock, f, false); err != nil {
+		return err
+	}
+	infos := upstream.Evaluate(inv.Lock, upstream.ReadCache(upstream.Path(home)))
+	var names []string
+	for name, info := range infos {
+		if info.State == upstream.Outdated {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		fmt.Printf("%s\t%s\n", name, inv.Lock.Skills[name].Source)
 	}
 	return nil
 }

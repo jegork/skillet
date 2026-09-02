@@ -1,12 +1,16 @@
 package inventory_test
 
 import (
+	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
+	"github.com/jegork/skillet/internal/doctor"
 	"github.com/jegork/skillet/internal/inventory"
 	"github.com/jegork/skillet/internal/skill"
 	"github.com/jegork/skillet/internal/testhome"
+	"github.com/jegork/skillet/internal/upstream"
 )
 
 func TestLoadGlobalOnly(t *testing.T) {
@@ -127,5 +131,29 @@ func TestLoadConfiguredPath(t *testing.T) {
 	}
 	if len(inv.Projects) != 1 {
 		t.Fatalf("projects %v", inv.Projects)
+	}
+}
+
+func TestLoadEvaluatesUpstreamCache(t *testing.T) {
+	h := testhome.New(t)
+	h.Skill("alpha", "does alpha")
+	h.LockWithHashes(map[string]string{"alpha": "acme/repo"}, map[string]string{"alpha": "1111111111111111111111111111111111111111"})
+	cache := `{"version":1,"repos":{"acme/repo":{"fetchedAt":"2026-09-01T12:00:00Z","trees":{"skills/alpha":"2222222222222222222222222222222222222222"}}}}`
+	os.MkdirAll(filepath.Join(h.Dir, ".cache", "skillet"), 0o755)
+	os.WriteFile(filepath.Join(h.Dir, ".cache", "skillet", "upstream.json"), []byte(cache), 0o644)
+
+	inv, err := inventory.Load(h.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.ContainsFunc(inv.Findings, func(f doctor.Finding) bool {
+		return f.Check == "outdated" && f.Skill == "alpha"
+	}) {
+		t.Errorf("findings %v", inv.Findings)
+	}
+	info := inv.Upstream["alpha"]
+	if info.State != upstream.Outdated || info.Upstream != "2222222222222222222222222222222222222222" {
+		t.Errorf("upstream info %+v", info)
 	}
 }

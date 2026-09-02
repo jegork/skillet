@@ -9,6 +9,7 @@ import (
 	"github.com/jegork/skillet/internal/doctor"
 	"github.com/jegork/skillet/internal/skill"
 	"github.com/jegork/skillet/internal/testhome"
+	"github.com/jegork/skillet/internal/upstream"
 )
 
 type key struct {
@@ -36,6 +37,21 @@ func run(t *testing.T, h *testhome.Home, consumers ...consumer.Consumer) []docto
 		reports[c.Name()] = rep
 	}
 	return doctor.Run(doctor.Input{Paths: paths, Skills: skills, Lock: lock, Reports: reports})
+}
+
+// runWithUpstream is run with an upstream check result injected.
+func runWithUpstream(t *testing.T, h *testhome.Home, up map[string]upstream.Info) []doctor.Finding {
+	t.Helper()
+	paths := skill.Paths{Home: h.Dir}
+	lock, err := skill.ReadLock(paths.LockFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	skills, err := skill.Scan(paths.SkillsDir(), lock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doctor.Run(doctor.Input{Paths: paths, Skills: skills, Lock: lock, Upstream: up})
 }
 
 func keyed(fs []doctor.Finding) map[key]string {
@@ -177,6 +193,29 @@ func TestDriftAgainstLockHash(t *testing.T) {
 	})
 
 	expect(t, run(t, h), key{"drift", "changed", doctor.Info})
+}
+
+func TestOutdatedAgainstUpstream(t *testing.T) {
+	h := testhome.New(t)
+	h.Skill("stale", "S")
+	h.Skill("unknown", "U")
+	h.Skill("own", "O")
+	h.Readme("| `stale` | vendored (acme/a) | S |", "| `unknown` | vendored (acme/b) | U |", "| `own` | own | O |")
+	staleHash, err := skill.TreeHash(filepath.Join(h.SkillsDir(), "stale"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.LockWithHashes(map[string]string{"stale": "acme/a", "unknown": "acme/b"}, map[string]string{"stale": staleHash})
+	got := expect(t, runWithUpstream(t, h, map[string]upstream.Info{
+		"stale":   {State: upstream.Outdated, Upstream: "2222222222222222222222222222222222222222", Lock: "1111111111111111111111111111111111111111"},
+		"unknown": {State: upstream.Unknown},
+	}), key{"outdated", "stale", doctor.Info})
+	msg := got[key{"outdated", "stale", doctor.Info}]
+	for _, want := range []string{"2222222", staleHash[:7], "pnpx skills update"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message %q missing %q", msg, want)
+		}
+	}
 }
 
 func TestProvenanceMarkers(t *testing.T) {

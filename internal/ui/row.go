@@ -13,25 +13,32 @@ import (
 
 	"github.com/jegork/skillet/internal/doctor"
 	"github.com/jegork/skillet/internal/skill"
+	"github.com/jegork/skillet/internal/upstream"
 )
 
 type item struct {
 	skill    skill.Skill
 	enabled  map[string]bool // consumer name -> sees this skill
 	findings []doctor.Finding
+	upstream upstream.State // Unknown until the background check lands
 }
 
 func (i item) FilterValue() string { return i.skill.Name }
 
 type columns struct {
-	name, origin, consumers, doctor, modified, description int
+	name, origin, upd, consumers, doctor, modified, description int
 }
 
 // layout splits a row width into columns; description absorbs the rest and
 // disappears on narrow panes.
 func layout(width int, consumers int) columns {
-	c := columns{name: 26, origin: 22, consumers: consumers + 1, doctor: 3, modified: 4}
-	base := func() int { return 2 + c.name + 1 + c.origin + 1 + c.consumers + 1 + c.doctor + 1 + c.modified }
+	c := columns{name: 26, origin: 22, upd: 3, consumers: consumers + 1, doctor: 3, modified: 4}
+	base := func() int {
+		return 2 + c.name + 1 + c.origin + 1 + c.upd + 1 + c.consumers + 1 + c.doctor + 1 + c.modified
+	}
+	for base() > width && c.upd > 0 {
+		c.upd-- // on very narrow panes the upstream marker gives way first
+	}
 	for base() > width && c.origin > 8 {
 		c.origin--
 	}
@@ -94,11 +101,8 @@ func (d delegate) header(width int) string {
 	}
 	cells := []string{
 		"  ",
-		pad("skill", c.name), pad("origin", c.origin), pad(badges, c.consumers),
+		pad("skill", c.name), pad("origin", c.origin), pad("upd", c.upd), pad(badges, c.consumers),
 		pad("dr", c.doctor), pad("mod", c.modified),
-	}
-	if c.description > 0 {
-		cells = append(cells, pad("description", c.description))
 	}
 	return d.styles.header.Render(strings.Join(cells, " "))
 }
@@ -133,8 +137,12 @@ func (d delegate) row(it item, c columns, selected bool) string {
 	if n := len(it.findings); n > 0 {
 		dr = d.severityStyle(worst(it.findings)).Render(pad(fmt.Sprint(n), c.doctor))
 	}
+	upd := s.faint.Render(pad("·", c.upd))
+	if it.upstream == upstream.Outdated {
+		upd = s.warn.Render(pad("↑", c.upd))
+	}
 	mod := s.faint.Render(pad(relTime(it.skill.ModTime, d.now()), c.modified))
-	cells := []string{cursor + name, origin, badges.String(), dr, mod}
+	cells := []string{cursor + name, origin, upd, badges.String(), dr, mod}
 	if c.description > 0 {
 		cells = append(cells, s.faint.Render(pad(it.skill.Description, c.description)))
 	}

@@ -124,3 +124,22 @@ func skipIfNoPnpx(t *testing.T) {
 		t.Skip("pnpx not on PATH")
 	}
 }
+
+func TestUpdateCmd(t *testing.T) {
+	cmd := UpdateCmd("/tmp/home", "alpha")
+	if got := strings.Join(cmd.Args, " "); got != "pnpx skills update alpha -g -y" {
+		t.Errorf("args %q", got)
+	}
+	if cmd.Dir != "/tmp/home" {
+		t.Errorf("dir %q", cmd.Dir)
+	}
+	var home string
+	for _, e := range cmd.Env {
+		if strings.HasPrefix(e, "HOME=") {
+			home = e
+		}
+	}
+	if home != "HOME=/tmp/home" {
+		t.Errorf("env %q", home)
+	}
+}

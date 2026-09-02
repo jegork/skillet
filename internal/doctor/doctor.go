@@ -14,6 +14,7 @@ import (
 	"github.com/jegork/skillet/internal/consumer"
 	"github.com/jegork/skillet/internal/readme"
 	"github.com/jegork/skillet/internal/skill"
+	"github.com/jegork/skillet/internal/upstream"
 )
 
 type Severity int
@@ -51,6 +52,7 @@ type Input struct {
 	Skills   []skill.Skill
 	Lock     skill.Lock
 	Reports  map[string]consumer.Report
+	Upstream map[string]upstream.Info // nil means never checked
 	Projects []ProjectInput
 }
 
@@ -80,6 +82,7 @@ func Run(in Input) []Finding {
 	for _, p := range in.Projects {
 		out = append(out, projectRun(in, p)...)
 	}
+	out = append(out, outdated(in.Skills, in.Lock, in.Upstream)...)
 	return out
 }
 
@@ -333,6 +336,36 @@ func drift(skills []skill.Skill, lock skill.Lock) []Finding {
 		}
 	}
 	return out
+}
+
+// outdated flags vendored skills whose upstream repo moved since the lock
+// was written. Info only: updating is a user decision.
+func outdated(skills []skill.Skill, lock skill.Lock, up map[string]upstream.Info) []Finding {
+	var out []Finding
+	if len(up) == 0 {
+		return out
+	}
+	for _, s := range globalSkills(skills) {
+		entry, ok := lock.Skills[s.Name]
+		if !ok {
+			continue
+		}
+		info, ok := up[s.Name]
+		if !ok || info.State != upstream.Outdated {
+			continue
+		}
+		out = append(out, Finding{"outdated", s.Name, "", Info,
+			fmt.Sprintf("upstream changed: lock %s, upstream %s; run `pnpx skills update %s`", short(entry.SkillFolderHash), short(info.Upstream), s.Name)})
+	}
+	return out
+}
+
+// short truncates a git sha for a one-line message.
+func short(hash string) string {
+	if len(hash) > 7 {
+		return hash[:7]
+	}
+	return hash
 }
 
 func lockOrphans(lock skill.Lock, known map[string]skill.Skill, project string) []Finding {

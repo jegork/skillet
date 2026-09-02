@@ -1,14 +1,36 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jegork/skillet/internal/config"
+	"github.com/jegork/skillet/internal/skill"
 	"github.com/jegork/skillet/internal/testhome"
+	"github.com/jegork/skillet/internal/upstream"
 )
+
+// captureStdout reroutes os.Stdout while fn runs.
+func captureStdout(t *testing.T, fn func()) *bytes.Buffer {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = old }()
+	fn()
+	w.Close()
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	return &buf
+}
 
 func TestStoreInitWritesConfigBack(t *testing.T) {
 	h := testhome.New(t)
@@ -98,5 +120,79 @@ func TestRunConfigSetKeepsComments(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("config lost %q:\n%s", want, out)
 		}
+	}
+}
+
+type fakeFetcher struct {
+	trees map[string][]upstream.Entry
+	fail  map[string]error
+}
+
+func (f fakeFetcher) Tree(ctx context.Context, owner, repo string) ([]upstream.Entry, error) {
+	if err := f.fail[owner+"/"+repo]; err != nil {
+		return nil, err
+	}
+	return f.trees[owner+"/"+repo], nil
+}
+
+func outdatedHome(t *testing.T) *testhome.Home {
+	h := testhome.New(t)
+	h.Skill("vend", "vendored one")
+	h.Skill("own", "own one")
+	stale, err := skill.TreeHash(h.SkillsDir() + "/vend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.LockWithHashes(map[string]string{"vend": "acme/skills"}, map[string]string{"vend": stale})
+	h.Readme("| `vend` | vendored (acme/skills) | vendored one |", "| `own` | own | own one |")
+	return h
+}
+
+func TestRunOutdatedPrintsStaleSkills(t *testing.T) {
+	h := outdatedHome(t)
+	f := fakeFetcher{trees: map[string][]upstream.Entry{
+		"acme/skills": {{Path: "skills/vend", Type: "tree", SHA: "2222222222222222222222222222222222222222"}},
+	}}
+	out := captureStdout(t, func() {
+		if err := runOutdated(h.Dir, f); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if got := out.String(); !strings.Contains(got, "vend\tacme/skills") {
+		t.Errorf("output %q", got)
+	}
+	// the fetch wrote the cache, so a second run reuses it
+	out2 := captureStdout(t, func() {
+		if err := runOutdated(h.Dir, fakeFetcher{fail: map[string]error{"acme/skills": errors.New("rate limited")}}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if got, out2 := out.String(), out2.String(); got != out2 {
+		t.Errorf("fresh %q vs cached %q", got, out2)
+	}
+}
+
+func TestRunOutdatedQuietWhenUpToDateOrOffline(t *testing.T) {
+	h := outdatedHome(t)
+	stale, _ := skill.TreeHash(h.SkillsDir() + "/vend")
+	upToDate := fakeFetcher{trees: map[string][]upstream.Entry{
+		"acme/skills": {{Path: "skills/vend", Type: "tree", SHA: stale}},
+	}}
+	out := captureStdout(t, func() {
+		if err := runOutdated(h.Dir, upToDate); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if out.Len() != 0 {
+		t.Errorf("up-to-date home printed %q", out.String())
+	}
+	offline := fakeFetcher{fail: map[string]error{"acme/skills": errors.New("offline")}}
+	out = captureStdout(t, func() {
+		if err := runOutdated(h.Dir, offline); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if out.Len() != 0 {
+		t.Errorf("offline home printed %q", out.String())
 	}
 }
