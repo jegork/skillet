@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0](https://github.com/jegork/skillet/compare/v0.4.0...v0.5.0) (2026-09-06)
+
+
+### Features
+
+* delete a skill with D and skillet remove ([#23](https://github.com/jegork/skillet/issues/23)) ([7d4a17b](https://github.com/jegork/skillet/commit/7d4a17b1ba540911aea33788bd190e3441d92d5b)), closes [#22](https://github.com/jegork/skillet/issues/22)
+* explore the skills the vendored repos ship ([#24](https://github.com/jegork/skillet/issues/24)) ([e2e0870](https://github.com/jegork/skillet/commit/e2e08700e248c1ed66f0b096f134dfa3ac18fc11)), closes [#21](https://github.com/jegork/skillet/issues/21)
+
+
+### Bug Fixes
+
+* dispatch the remove verb from the cli ([#26](https://github.com/jegork/skillet/issues/26)) ([760fd17](https://github.com/jegork/skillet/commit/760fd176b057d72b35b73aa6b08bdfc98b7a3ca6))
+* refresh update markers and add bulk skill updates ([#28](https://github.com/jegork/skillet/issues/28)) ([a1ae72a](https://github.com/jegork/skillet/commit/a1ae72a94841ba1bb01b6e27f8b12f1e8b947925))
+
 ## [0.4.0](https://github.com/jegork/skillet/compare/v0.3.0...v0.4.0) (2026-09-02)
 
 
