@@ -26,6 +26,7 @@ import (
 	"github.com/jegork/skillet/internal/move"
 	"github.com/jegork/skillet/internal/readme"
 	"github.com/jegork/skillet/internal/registry"
+	"github.com/jegork/skillet/internal/remove"
 	"github.com/jegork/skillet/internal/rename"
 	"github.com/jegork/skillet/internal/skill"
 	"github.com/jegork/skillet/internal/store"
@@ -66,6 +67,7 @@ type Config struct {
 	Upstream   func(ctx context.Context, force bool) error // nil disables the upstream check
 	UpdateCmd  func(name string) *exec.Cmd                 // nil disables updating
 	Vendors    func() []explore.Skill                      // nil disables the explore view
+	RemoveCmd  func(name string) *exec.Cmd                 // nil disables deleting vendored globals
 }
 type inventoryMsg struct {
 	inv inventory.Inventory
@@ -84,8 +86,15 @@ type updateDoneMsg struct {
 }
 
 // updatedMsg arrives after the rescan + README pass over the updated files.
+
 type updatedMsg struct {
 	inv  inventory.Inventory
+	err  error
+	name string
+}
+
+// removedMsg arrives after the pnpx CLI deleted a vendored global skill.
+type removedMsg struct {
 	err  error
 	name string
 }
@@ -119,6 +128,7 @@ type Model struct {
 	selectGroup     string   // group to select after the next rebuild
 	moveTargets     []string // skill roots, "" first when global is a target
 	upstreamPending bool
+	confirmDelete   bool // D pressed, waiting for y on the flash line
 	tree            bool // group skills by origin instead of a flat list
 	collapsed       map[string]bool
 }
@@ -214,6 +224,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.setInventory(msg.inv)
 		m.flash = "updated " + msg.name
 		return m, cmd
+	case removedMsg:
+		// the CLI removed folder, lock entry and agent links; the omp
+		// ignore entry and the README row are skillet's to forget
+		if msg.err != nil {
+			m.flash = "remove " + msg.name + ": " + msg.err.Error()
+			return m, m.reload()
+		}
+		for _, s := range m.inv.Skills {
+			if s.Scope != "" || s.Name != msg.name {
+				continue
+			}
+			if err := remove.Cleanup(remove.Input{Home: m.inv.Paths, Projects: m.inv.Projects}, s); err != nil {
+				m.flash = "remove " + msg.name + ": " + err.Error()
+				return m, m.reload()
+			}
+			break
+		}
+		m.flash = "deleted " + msg.name
+		return m, m.reload()
 	case upstreamDoneMsg:
 		m.upstreamPending = false
 		if msg.forced {
@@ -246,6 +275,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.mode == modeRefine {
 		return m.updateRefine(msg)
+	}
+	if m.confirmDelete {
+		m.confirmDelete = false
+		if msg.String() == "y" {
+			return m.deleteSelected()
+		}
+		return m, nil
 	}
 	if m.list.SettingFilter() {
 		return m.forward(msg)
@@ -357,6 +393,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.startSearch()
 	case key.Matches(msg, m.keys.Explore):
 		return m.startExplore()
+	case key.Matches(msg, m.keys.Delete):
+		return m.startDelete()
 	}
 	return m.forward(msg)
 }
@@ -906,6 +944,71 @@ func moveScopeName(root string) string {
 	return filepath.Base(root)
 }
 
+// startDelete arms the confirm step: the next key must be y on the flash
+// line, anything else cancels.
+func (m Model) startDelete() (tea.Model, tea.Cmd) {
+	it, ok := m.list.SelectedItem().(item)
+	if !ok {
+		return m, nil
+	}
+	if it.skill.Origin.Vendored && it.skill.Scope == "" && m.cfg.RemoveCmd == nil {
+		m.flash = "delete not configured"
+		return m, nil
+	}
+	m.confirmDelete = true
+	return m, nil
+}
+
+// deleteSelected removes the skill and its traces. Selection follows the
+// neighbouring row: rebuildItems keeps the selection on the same name when
+// it survives, so aim it at the next skill below (or above at the end).
+func (m Model) deleteSelected() (tea.Model, tea.Cmd) {
+	it, ok := m.list.SelectedItem().(item)
+	if !ok {
+		return m, nil
+	}
+	s := it.skill
+	if s.Origin.Vendored && s.Scope == "" {
+		name := s.Name
+		return m, tea.ExecProcess(m.cfg.RemoveCmd(name), func(err error) tea.Msg {
+			return removedMsg{err: err, name: name}
+		})
+	}
+	in := remove.Input{Home: m.inv.Paths, Projects: m.inv.Projects}
+	if err := remove.Remove(in, s); err != nil {
+		m.flash = "delete: " + err.Error()
+		return m, nil
+	}
+	m.flash = "deleted " + s.Name
+	m.selectNext = neighbourName(m.inv.Skills, s)
+	return m, m.reload()
+}
+
+// neighbourName picks the skill to select after one is deleted: the next
+// one in scan order, else the previous, else "".
+func neighbourName(skills []skill.Skill, gone skill.Skill) string {
+	same := gone.Scope == ""
+	var below, above string
+	for _, s := range skills {
+		if (s.Scope == "") != same || s.Name == gone.Name {
+			continue
+		}
+		if s.Name > gone.Name {
+			if below == "" || s.Name < below {
+				below = s.Name
+			}
+		} else {
+			if above == "" || s.Name > above {
+				above = s.Name
+			}
+		}
+	}
+	if below != "" {
+		return below
+	}
+	return above
+}
+
 // refineAgentNames are the CLIs refine can launch, probed with lookPath in
 // this order.
 var refineAgentNames = []string{"claude", "omp", "codex"}
@@ -1119,6 +1222,9 @@ func (m Model) flashLine() string {
 			parts = append(parts, fmt.Sprintf("%d %s", i+1, moveScopeName(root)))
 		}
 		return m.styles.flash.Render(pad(strings.Join(parts, " · ")+" · esc cancel", m.width))
+	}
+	if m.confirmDelete {
+		return m.styles.flash.Render(pad("delete "+m.selectedName()+"? y/N", m.width))
 	}
 	if m.flash == "" {
 		return ""
