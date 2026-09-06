@@ -16,8 +16,10 @@ import (
 	"github.com/jegork/skillet/internal/config"
 	"github.com/jegork/skillet/internal/doctor"
 	"github.com/jegork/skillet/internal/inventory"
+	"github.com/jegork/skillet/internal/project"
 	"github.com/jegork/skillet/internal/readme"
 	"github.com/jegork/skillet/internal/registry"
+	"github.com/jegork/skillet/internal/remove"
 	"github.com/jegork/skillet/internal/skill"
 	"github.com/jegork/skillet/internal/store"
 	"github.com/jegork/skillet/internal/store/chezmoi"
@@ -51,7 +53,7 @@ func main() {
 	})
 	showVersion := fs.Bool("version", false, "print version")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [--store chezmoi|git] [config|doctor|status|readme|install|outdated|store init]")
+		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] [--store chezmoi|git] [config|doctor|status|readme|install|outdated|remove|store init]")
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(os.Args[1:])
@@ -132,9 +134,91 @@ func runTUI(home string, st store.Store, cfgPath string) error {
 		UpdateCmd: func(name string) *exec.Cmd {
 			return registry.UpdateCmd(home, name)
 		},
+		RemoveCmd: func(name string) *exec.Cmd {
+			return remove.Cmd(home, name)
+		},
 	})
 	_, err = tea.NewProgram(m).Run()
 	return err
+}
+
+// runRemove handles skillet remove <name> [--project ROOT] -y. -y is parsed
+// but required only in spirit: the CLI verb is already non-interactive.
+func runRemove(home string, args []string) error {
+	fs := flag.NewFlagSet("remove", flag.ExitOnError)
+	projectRoot := fs.String("project", "", "project root the skill lives in (default: global skills dir)")
+	_ = fs.Bool("y", false, "skip confirmation (accepted, nothing to confirm)")
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: skillet [--home DIR] remove <name> [--project ROOT] -y")
+	}
+	// flag parsing stops at the positional, so flags after it are split
+	// out by hand, like runInstall
+	var name string
+	var rest []string
+	for _, a := range args {
+		if name == "" && !strings.HasPrefix(a, "-") {
+			name = a
+			continue
+		}
+		rest = append(rest, a)
+	}
+	_ = fs.Parse(rest)
+	if name == "" {
+		fs.Usage()
+		os.Exit(2)
+	}
+	in := remove.Input{Home: skill.Paths{Home: home}}
+	s := skill.Skill{Name: name}
+	if *projectRoot != "" {
+		root, err := filepath.Abs(*projectRoot)
+		if err != nil {
+			return err
+		}
+		cfg, err := config.Load(home)
+		if err != nil {
+			return err
+		}
+		projects, err := project.Discover(home, cfg)
+		if err != nil {
+			return err
+		}
+		var found *project.Project
+		for _, p := range projects {
+			if p.Root == root {
+				found = &p
+			}
+		}
+		if found == nil {
+			return fmt.Errorf("no project with skills at %s (check projects.roots/paths)", root)
+		}
+		s.Dir = filepath.Join(found.SkillsDir(), name)
+		s.Scope = root
+	} else {
+		s.Dir = filepath.Join(home, ".agents", "skills", name)
+	}
+	// origin decides vendored handling; read the lock for the global scope
+	if s.Scope == "" {
+		lock, err := skill.ReadLock(in.Home.LockFile())
+		if err != nil {
+			return err
+		}
+		if entry, ok := lock.Skills[name]; ok {
+			s.Origin = skill.Origin{Vendored: true, Source: entry.Source}
+		}
+	} else {
+		lock, err := skill.ReadProjectLock(filepath.Join(s.Scope, "skills-lock.json"))
+		if err != nil {
+			return err
+		}
+		if entry, ok := lock.Skills[name]; ok {
+			s.Origin = skill.Origin{Vendored: true, Source: entry.Source}
+		}
+	}
+	if err := remove.Remove(in, s); err != nil {
+		return err
+	}
+	fmt.Printf("removed %s\n", name)
+	return nil
 }
 
 // runConfig handles skillet config path|get|set|edit.

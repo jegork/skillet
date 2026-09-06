@@ -25,6 +25,8 @@ skillet status        # store drift: uncaptured, uncommitted, ahead
 skillet readme        # regenerate the README index
 skillet install owner/repo [--skill NAME]
                       # install from skills.sh via pnpx skills
+skillet remove <name> [--project ROOT] -y
+                      # delete a skill and clean up stubs, lock, README
 skillet outdated      # vendored skills with upstream changes
 skillet store init    # create the git store repo (--git-dir, --remote)
 skillet config        # path, get/set keys, edit in $EDITOR
@@ -78,6 +80,7 @@ skillet config edit
 | `p` | refine (own only): pick claude / omp / codex and launch it on the skill with a prefilled message |
 | `m` | move between scopes: global or one of the discovered projects |
 | `s` | capture into the store, review the diff, commit, push |
+| `D` | delete the picked skill: asks `delete <name>? y/N`, cleans stubs, lock entry, README row |
 | `d` | doctor report |
 | `R` | regenerate the README index, keeping its hand-made sections |
 | `i` | search skills.sh, `enter` installs the picked skill via `pnpx skills` |
@@ -138,6 +141,7 @@ internal/doctor     dangling stubs, unknown cross-references, stale README, lock
 internal/project    project discovery: roots, paths, fixed probes
 internal/readme     README index parse and regeneration
 internal/rename     rename an own skill and fix everything that pointed at it
+internal/remove      delete a skill from any scope and forget its stubs, lock entry, README row
 internal/config     read/write ~/.config/skillet/config.yml, comments intact
 internal/store      Store interface: Status / Capture / Diff / Commit / Push
 internal/store/chezmoi
