@@ -131,11 +131,13 @@ func ghToken() string {
 	return strings.TrimSpace(string(out))
 }
 
-// Repo is one cached fetch: when it happened and the tree sha of every
-// folder in the repo.
+// Repo is one cached fetch: when it happened, the tree sha of every
+// folder in the repo, and every folder that holds a SKILL.md (the vendor's
+// installable skills), sorted.
 type Repo struct {
 	FetchedAt time.Time         `json:"fetchedAt"`
-	Trees     map[string]string `json:"trees"` // folder path -> tree sha
+	Trees     map[string]string `json:"trees"`  // folder path -> tree sha
+	Skills    []string          `json:"skills"` // skill folder paths
 }
 
 // Cache is the on-disk state of the upstream check.
@@ -230,12 +232,20 @@ func Refresh(ctx context.Context, cachePath string, lock skill.Lock, f Fetcher, 
 			continue
 		}
 		trees := make(map[string]string, len(entries))
+		var skills []string
 		for _, e := range entries {
 			if e.Type == "tree" {
 				trees[e.Path] = e.SHA
+				continue
+			}
+			// every folder with a SKILL.md is an installable skill; a
+			// root-level one installs the whole repo, so it stays "."
+			if path.Base(e.Path) == "SKILL.md" {
+				skills = append(skills, path.Dir(e.Path))
 			}
 		}
-		c.Repos[source] = Repo{FetchedAt: now, Trees: trees}
+		sort.Strings(skills)
+		c.Repos[source] = Repo{FetchedAt: now, Trees: trees, Skills: skills}
 	}
 	c.Version = cacheVersion
 	return WriteCache(cachePath, c)

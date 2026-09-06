@@ -68,6 +68,10 @@ func (d delegate) Render(w io.Writer, m list.Model, index int, li list.Item) {
 		fmt.Fprint(w, d.groupRow(g, index == m.Index()))
 		return
 	}
+	if e, ok := li.(exploreItem); ok {
+		fmt.Fprint(w, d.exploreRow(e, index == m.Index()))
+		return
+	}
 	it, ok := li.(item)
 	if !ok {
 		return
@@ -88,6 +92,19 @@ func (d delegate) groupRow(g groupItem, selected bool) string {
 		style = d.styles.vendored
 	}
 	return cursor + style.Render(marker+" "+name) + d.styles.faint.Render(fmt.Sprintf(" (%d)", len(g.children)))
+}
+
+func (d delegate) exploreRow(e exploreItem, selected bool) string {
+	cursor, style := "  ", d.styles.accent
+	if selected {
+		cursor, style = "> ", d.styles.selected
+	}
+	state := d.styles.ok.Render("available")
+	if e.skill.Installed {
+		state = d.styles.faint.Render("installed")
+	}
+	return cursor + style.Render(e.skill.Name) + "  " +
+		d.styles.faint.Render(e.skill.Path) + "  " + state
 }
 
 // isProjectKey reports whether a group key is a project root path.

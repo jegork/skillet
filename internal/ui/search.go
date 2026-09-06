@@ -148,7 +148,9 @@ func (m Model) searchDone(msg searchDoneMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) installDone(msg installDoneMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.search.phase = searchChoosing
+		if m.mode != modeExplore {
+			m.search.phase = searchChoosing
+		}
 		m.flash = "install failed: " + msg.err.Error()
 		return m, nil
 	}

@@ -97,7 +97,8 @@ func treeFilter(term string, targets []string) []list.Rank {
 func visibleSkills(l list.Model) int {
 	n := 0
 	for _, it := range l.VisibleItems() {
-		if _, ok := it.(item); ok {
+		switch it.(type) {
+		case item, exploreItem:
 			n++
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -296,5 +297,62 @@ func TestReadCacheDegrades(t *testing.T) {
 	}
 	if c := ReadCache(p); c.Repos != nil {
 		t.Error("wrong version must read as an empty cache")
+	}
+}
+
+// the fixture carries SKILL.md blobs at several depths: repo root, the
+// usual skills/ folder, a nested skills/.curated/x path and a deep one
+func TestRefreshRecordsSkillFolders(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "tree.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := ParseTree(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newFakeFetcher()
+	f.trees["emil/skills"] = entries
+	h := t.TempDir()
+	lock := lockWith(map[string]skill.LockEntry{
+		"animate": entry("emil/skills", "skills/animate/SKILL.md", lockSHA),
+	})
+	if err := Refresh(t.Context(), Path(h), lock, f, false); err != nil {
+		t.Fatal(err)
+	}
+	got := ReadCache(Path(h)).Repos["emil/skills"].Skills
+	want := []string{
+		".",
+		"skills/.curated/x",
+		"skills/animate",
+		"skills/animate-expo",
+		"skills/animation-vocabulary",
+		"skills/apple-design",
+		"skills/ask-sonner",
+		"skills/emil-design-eng",
+		"skills/find-animation-opportunities",
+		"skills/improve-animations",
+		"skills/pick-ui-library",
+		"skills/prototype",
+		"skills/review-animations",
+		"skills/write-swift",
+		"tools/deep/digger",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Skills = %v, want %v", got, want)
+	}
+}
+
+func TestCacheRoundTripKeepsSkillFolders(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cache", "upstream.json")
+	c := Cache{Version: cacheVersion, Repos: map[string]Repo{
+		"acme/one": {FetchedAt: time.Now(), Trees: map[string]string{"skills/one": upSHA}, Skills: []string{".", "skills/one"}},
+	}}
+	if err := WriteCache(p, c); err != nil {
+		t.Fatal(err)
+	}
+	got := ReadCache(p).Repos["acme/one"].Skills
+	if !reflect.DeepEqual(got, []string{".", "skills/one"}) {
+		t.Errorf("Skills after round trip = %v", got)
 	}
 }
