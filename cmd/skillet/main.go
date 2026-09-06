@@ -71,9 +71,26 @@ func main() {
 	if !storeSet && cfg.Store != "" {
 		storeName = cfg.Store
 	}
-	switch fs.Arg(0) {
+	handled, err := dispatch(home, storeName, cfg, fs.Args())
+	if !handled {
+		fs.Usage()
+		os.Exit(2)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "skillet:", err)
+		os.Exit(1)
+	}
+}
+
+// dispatch runs the verb in args[0]; handled is false for an unknown verb.
+func dispatch(home, storeName string, cfg config.Config, args []string) (handled bool, err error) {
+	verb, rest := "", args
+	if len(args) > 0 {
+		verb, rest = args[0], args[1:]
+	}
+	switch verb {
 	case "config":
-		err = runConfig(home, fs.Args()[1:])
+		err = runConfig(home, rest)
 	case "doctor":
 		err = runDoctor(home)
 	case "status":
@@ -83,21 +100,19 @@ func main() {
 	case "outdated":
 		err = runOutdated(home, &upstream.GitHub{})
 	case "explore":
-		err = runExplore(home, fs.Args()[1:], &upstream.GitHub{})
+		err = runExplore(home, rest, &upstream.GitHub{})
 	case "install":
-		err = runInstall(home, fs.Args()[1:])
+		err = runInstall(home, rest)
+	case "remove":
+		err = runRemove(home, rest)
 	case "store":
-		err = runStore(home, cfg, fs.Args()[1:])
+		err = runStore(home, cfg, rest)
 	case "":
 		err = runTUI(home, newStore(storeName, home, cfg.GitStore.Dir), config.Path(home))
 	default:
-		fs.Usage()
-		os.Exit(2)
+		return false, nil
 	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "skillet:", err)
-		os.Exit(1)
-	}
+	return true, err
 }
 
 // newStore builds the selected backend; gitDir empty means the default

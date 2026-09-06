@@ -251,6 +251,26 @@ func TestRunExplorePrintsVendors(t *testing.T) {
 	}
 }
 
+// every verb the usage line advertises must reach its handler instead of
+// falling through to usage
+func TestDispatchKnowsEveryVerb(t *testing.T) {
+	h := testhome.New(t)
+	h.Skill("alpha", "does alpha things")
+	h.Readme("| `alpha` | own | does alpha things |")
+	captureStdout(t, func() {
+		handled, err := dispatch(h.Dir, "chezmoi", config.Config{}, []string{"remove", "alpha", "-y"})
+		if !handled || err != nil {
+			t.Fatalf("remove: handled=%v err=%v", handled, err)
+		}
+	})
+	if _, err := os.Stat(filepath.Join(h.SkillsDir(), "alpha")); !os.IsNotExist(err) {
+		t.Error("remove did not run")
+	}
+	if handled, _ := dispatch(h.Dir, "chezmoi", config.Config{}, []string{"bogus"}); handled {
+		t.Error("unknown verb reported as handled")
+	}
+}
+
 func TestRunRemoveOwnGlobal(t *testing.T) {
 	h := testhome.New(t)
 	h.Skill("alpha", "does alpha things")
