@@ -1,7 +1,11 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"regexp"
+	"strings"
 	"testing"
 
 	"charm.land/bubbles/v2/key"
@@ -46,6 +50,54 @@ func TestFullHelpListsEveryBinding(t *testing.T) {
 		}
 		if !listed[b.Help().Key] {
 			t.Errorf("keyMap.%s (%s) is not in FullHelp", v.Type().Field(i).Name, b.Help().Key)
+		}
+	}
+}
+
+// the README keymap table is hand-maintained and rows have been dropped in
+// merges: every binding's help key must appear in the table's key column.
+// Confirm, TogglePush and Back are described in prose under the table.
+func TestReadmeListsEveryBinding(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	inTable := false
+	keys := map[string]bool{}
+	for _, line := range strings.Split(string(b), "\n") {
+		switch {
+		case strings.HasPrefix(line, "| key | action |"):
+			inTable = true
+		case inTable && !strings.HasPrefix(line, "|"):
+			inTable = false
+		case inTable:
+			cell := strings.SplitN(strings.TrimPrefix(line, "|"), "|", 2)[0]
+			for _, m := range regexp.MustCompile("`([^`]+)`").FindAllStringSubmatch(cell, -1) {
+				keys[m[1]] = true
+			}
+		}
+	}
+	if len(keys) == 0 {
+		t.Fatal("no keymap table found in README")
+	}
+	skip := map[string]bool{"Confirm": true, "TogglePush": true, "Back": true}
+	km := newKeyMap()
+	v := reflect.ValueOf(km)
+	for i := 0; i < v.NumField(); i++ {
+		bnd, ok := v.Field(i).Interface().(key.Binding)
+		name := v.Type().Field(i).Name
+		if !ok || skip[name] {
+			continue
+		}
+		// help keys like "c/x/o" list alternatives; "/" itself is a key
+		found := keys[bnd.Help().Key]
+		for _, k := range strings.Split(bnd.Help().Key, "/") {
+			if keys[k] {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("keyMap.%s (%s) has no row in the README keymap table", name, bnd.Help().Key)
 		}
 	}
 }
