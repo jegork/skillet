@@ -78,6 +78,7 @@ skillet config edit
 | `c` `x` `o` | toggle visibility for claude / codex / omp |
 | `u` | check upstream: fetch the repos in the lock and mark outdated skills |
 | `U` | update the picked vendored skill with `pnpx skills update` (outdated only) |
+| `A` | update all global vendored skills with `pnpx skills update -g -y` |
 | `n` | rename (own only): dir, frontmatter, cross-references, stubs, README row |
 | `p` | refine (own only): pick claude / omp / codex and launch it on the skill with a prefilled message |
 | `m` | move between scopes: global or one of the discovered projects |
@@ -94,6 +95,11 @@ skillet config edit
 
 In the sync review: `enter` commits, `ctrl+p` toggles push, `esc` cancels and
 leaves the capture staged.
+
+`A` checks for updates itself, so there is no need to press `u` first. It
+updates global skills regardless of the current selection or list filter.
+Project skills are excluded. When it finishes, skillet rescans and
+regenerates the README index.
 
 `t` switches the list to a tree: your own skills first, then one collapsible
 group per vendored `owner/repo`, then one per project, groups and children
@@ -132,6 +138,11 @@ The upstream check asks GitHub for one recursive tree per repo (token from
 `gh auth token` when available, anonymous otherwise) and caches the folder
 hashes in `~/.cache/skillet/upstream.json` for an hour. Offline or rate
 limited: skills read as "unknown" and the last cache stays.
+
+The TUI refreshes this cache at startup and after an update; `u` forces a
+refresh. Installing or updating a skill invalidates its repo's cached check
+even within that hour. A cached hash that predates an installation cannot
+mark it outdated; a mismatch stays "unknown" until a newer check succeeds.
 
 The same cache drives the explore view (`a` in the TUI, `skillet explore`
 for scripts): one group per vendored `owner/repo` — home lock plus every

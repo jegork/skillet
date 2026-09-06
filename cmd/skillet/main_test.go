@@ -172,6 +172,42 @@ func TestRunOutdatedPrintsStaleSkills(t *testing.T) {
 	}
 }
 
+func TestTUIUpstreamRefreshesCurrentLock(t *testing.T) {
+	h := outdatedHome(t)
+	f := fakeFetcher{trees: map[string][]upstream.Entry{
+		"new/repo": {{Path: "skills/vend", Type: "tree", SHA: "2222222222222222222222222222222222222222"}},
+	}}
+	cfg, err := tuiConfig(h.Dir, nil, config.Path(h.Dir), f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Upstream == nil {
+		t.Fatal("TUI upstream check is not connected")
+	}
+	h.LockWithHashes(map[string]string{"vend": "new/repo"}, map[string]string{"vend": "1111111111111111111111111111111111111111"})
+	if err := cfg.Upstream(t.Context(), false); err != nil {
+		t.Fatal(err)
+	}
+	inv, err := cfg.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.Upstream["vend"].State != upstream.Outdated {
+		t.Fatalf("check did not use current lock: %+v", inv.Upstream)
+	}
+	f.trees["new/repo"] = []upstream.Entry{{Path: "skills/vend", Type: "tree", SHA: "1111111111111111111111111111111111111111"}}
+	if err := cfg.Upstream(t.Context(), true); err != nil {
+		t.Fatal(err)
+	}
+	inv, err = cfg.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.Upstream["vend"].State != upstream.Current {
+		t.Fatalf("forced check reused cache: %+v", inv.Upstream)
+	}
+}
+
 func TestRunOutdatedQuietWhenUpToDateOrOffline(t *testing.T) {
 	h := outdatedHome(t)
 	stale, _ := skill.TreeHash(h.SkillsDir() + "/vend")

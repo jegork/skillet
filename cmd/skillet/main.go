@@ -113,11 +113,20 @@ func newStore(name, home, gitDir string) store.Store {
 }
 
 func runTUI(home string, st store.Store, cfgPath string) error {
-	inv, err := inventory.Load(home)
+	cfg, err := tuiConfig(home, st, cfgPath, &upstream.GitHub{})
 	if err != nil {
 		return err
 	}
-	m := ui.New(ui.Config{
+	_, err = tea.NewProgram(ui.New(cfg)).Run()
+	return err
+}
+
+func tuiConfig(home string, st store.Store, cfgPath string, f upstream.Fetcher) (ui.Config, error) {
+	inv, err := inventory.Load(home)
+	if err != nil {
+		return ui.Config{}, err
+	}
+	return ui.Config{
 		Inventory:  inv,
 		Load:       func() (inventory.Inventory, error) { return inventory.Load(home) },
 		Store:      st,
@@ -130,6 +139,13 @@ func runTUI(home string, st store.Store, cfgPath string) error {
 		UpdateCmd: func(name string) *exec.Cmd {
 			return registry.UpdateCmd(home, name)
 		},
+		Upstream: func(ctx context.Context, force bool) error {
+			inv, err := inventory.Load(home)
+			if err != nil {
+				return err
+			}
+			return upstream.Refresh(ctx, upstream.Path(home), explore.Locks(inv), f, force)
+		},
 		Vendors: func() []explore.Skill {
 			inv, err := inventory.Load(home)
 			if err != nil {
@@ -140,9 +156,7 @@ func runTUI(home string, st store.Store, cfgPath string) error {
 		RemoveCmd: func(name string) *exec.Cmd {
 			return remove.Cmd(home, name)
 		},
-	})
-	_, err = tea.NewProgram(m).Run()
-	return err
+	}, nil
 }
 
 // runRemove handles skillet remove <name> [--project ROOT] -y. -y is parsed

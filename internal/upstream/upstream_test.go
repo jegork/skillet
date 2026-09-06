@@ -156,6 +156,84 @@ func TestRefreshForceIgnoresTTL(t *testing.T) {
 	}
 }
 
+func TestRefreshAfterInstallIgnoresTTL(t *testing.T) {
+	p := Path(t.TempDir())
+	f := oneRepo()
+	e := entry("acme/one", "skills/one/SKILL.md", lockSHA)
+	lock := lockWith(map[string]skill.LockEntry{"one": e})
+	if err := Refresh(t.Context(), p, lock, f, false); err != nil {
+		t.Fatal(err)
+	}
+	e.SkillFolderHash = otherSHA
+	e.UpdatedAt = time.Now()
+	lock.Skills["one"] = e
+	f.trees["acme/one"] = []Entry{{Path: "skills/one", Type: "tree", SHA: otherSHA}}
+	if err := Refresh(t.Context(), p, lock, f, false); err != nil {
+		t.Fatal(err)
+	}
+	if f.calls["acme/one"] != 2 {
+		t.Errorf("new installation reused old cache: %d fetches", f.calls["acme/one"])
+	}
+	if got := Evaluate(lock, ReadCache(p))["one"]; got.State != Current {
+		t.Errorf("updated skill = %+v", got)
+	}
+}
+
+func TestEvaluateCachePredatingInstall(t *testing.T) {
+	now := time.Now()
+	c := Cache{Repos: map[string]Repo{
+		"acme/one": {FetchedAt: now.Add(-time.Minute), Trees: map[string]string{"skills/one": upSHA}},
+	}}
+	for _, tc := range []struct {
+		name               string
+		hash               string
+		installed, updated time.Time
+		want               State
+	}{
+		{"updated", lockSHA, time.Time{}, now, Unknown},
+		{"installed", lockSHA, now, time.Time{}, Unknown},
+		{"matching", upSHA, time.Time{}, now, Current},
+		{"older install", lockSHA, time.Time{}, now.Add(-time.Hour), Outdated},
+		{"equal timestamp", lockSHA, time.Time{}, now.Add(-time.Minute), Outdated},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := entry("acme/one", "skills/one/SKILL.md", tc.hash)
+			e.InstalledAt, e.UpdatedAt = tc.installed, tc.updated
+			got := Evaluate(lockWith(map[string]skill.LockEntry{"one": e}), c)["one"]
+			if got.State != tc.want {
+				t.Errorf("info = %+v, want state %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRefreshAfterInstallOffline(t *testing.T) {
+	p := Path(t.TempDir())
+	f := oneRepo()
+	e := entry("acme/one", "skills/one/SKILL.md", lockSHA)
+	lock := lockWith(map[string]skill.LockEntry{"one": e})
+	if err := Refresh(t.Context(), p, lock, f, false); err != nil {
+		t.Fatal(err)
+	}
+	before := ReadCache(p)
+	e.UpdatedAt = time.Now()
+	lock.Skills["one"] = e
+	f.fail["acme/one"] = errors.New("offline")
+	if err := Refresh(t.Context(), p, lock, f, false); err != nil {
+		t.Fatal(err)
+	}
+	after := ReadCache(p)
+	if !reflect.DeepEqual(before, after) {
+		t.Error("failed fetch changed the cache")
+	}
+	if f.calls["acme/one"] != 2 {
+		t.Errorf("did not retry after install: %d fetches", f.calls["acme/one"])
+	}
+	if got := Evaluate(lock, after)["one"]; got.State != Unknown {
+		t.Errorf("old cache marked updated skill: %+v", got)
+	}
+}
+
 func TestRefreshExpiresAfterTTL(t *testing.T) {
 	h := t.TempDir()
 	p := Path(h)
