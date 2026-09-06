@@ -100,8 +100,13 @@ func Add(ctx context.Context, home, source, name string) error {
 // UpdateCmd builds `pnpx skills update <name>` for the TUI's tea.ExecProcess:
 // the CLI owns the lock file and rewrites the skill folder in place, so its
 // output streams to the terminal while the TUI is suspended.
+// an empty name updates all global skills.
 func UpdateCmd(home, name string) *exec.Cmd {
-	cmd := exec.Command("pnpx", "skills", "update", name, "-g", "-y")
+	args := []string{"skills", "update"}
+	if name != "" {
+		args = append(args, name)
+	}
+	cmd := exec.Command("pnpx", append(args, "-g", "-y")...)
 	cmd.Dir = home
 	// the CLI picks the global scope from $HOME, like Add
 	cmd.Env = append(os.Environ(), "HOME="+home)

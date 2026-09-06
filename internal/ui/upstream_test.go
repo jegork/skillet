@@ -174,6 +174,71 @@ func TestUpdateFailureFlashesAndReloads(t *testing.T) {
 	}
 }
 
+func TestUpdateAllWithoutUpstreamCheck(t *testing.T) {
+	m, _, _ := newUpstreamModel(t)
+	m.inv.Upstream = nil
+	var names []string
+	m.cfg.UpdateCmd = func(name string) *exec.Cmd {
+		names = append(names, name)
+		return exec.Command("true")
+	}
+	m = press(m, "A")
+	if len(names) != 1 || names[0] != "" {
+		t.Fatalf("update all must run without a skill filter, got %v", names)
+	}
+}
+
+func TestUpdateAllNotConfigured(t *testing.T) {
+	m := press(newTestModel(t), "A")
+	if m.flash != "update not configured" {
+		t.Errorf("flash %q", m.flash)
+	}
+}
+
+func TestUpdateAllDonePreservesSelection(t *testing.T) {
+	m, _, _ := newUpstreamModel(t)
+	m = selectVend(t, m)
+	m = apply(m, updateDoneMsg{})
+	if m.flash != "updated all global skills" {
+		t.Errorf("flash %q", m.flash)
+	}
+	if it, ok := m.list.SelectedItem().(item); !ok || it.skill.Name != "vend" {
+		t.Errorf("selection lost: %v", m.list.SelectedItem())
+	}
+}
+
+func TestUpdateAllFailure(t *testing.T) {
+	m, _, _ := newUpstreamModel(t)
+	m = apply(m, updateDoneMsg{err: exec.ErrNotFound})
+	if !strings.Contains(m.flash, "update all global skills:") {
+		t.Errorf("flash %q", m.flash)
+	}
+}
+
+func TestUpdateRefreshesBeforeReload(t *testing.T) {
+	for _, name := range []string{"vend", ""} {
+		t.Run(updateTarget(name), func(t *testing.T) {
+			m, _, _ := newUpstreamModel(t)
+			refreshed := false
+			m.cfg.Upstream = func(ctx context.Context, force bool) error {
+				refreshed = true
+				return nil
+			}
+			load := m.cfg.Load
+			m.cfg.Load = func() (inventory.Inventory, error) {
+				if !refreshed {
+					t.Error("reloaded updated skills before refreshing upstream")
+				}
+				return load()
+			}
+			m = apply(m, updateDoneMsg{name: name})
+			if !refreshed {
+				t.Fatal("update did not refresh upstream")
+			}
+		})
+	}
+}
+
 func TestRowMarksOutdated(t *testing.T) {
 	d := delegate{styles: newStyles(true), consumers: []string{"claude", "codex", "omp"}, now: func() time.Time { return time.Now() }}
 	it := item{

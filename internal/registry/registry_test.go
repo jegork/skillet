@@ -143,3 +143,10 @@ func TestUpdateCmd(t *testing.T) {
 		t.Errorf("env %q", home)
 	}
 }
+
+func TestUpdateCmdAll(t *testing.T) {
+	cmd := UpdateCmd("/tmp/home", "")
+	if got := strings.Join(cmd.Args, " "); got != "pnpx skills update -g -y" {
+		t.Errorf("args %q", got)
+	}
+}

@@ -6,7 +6,7 @@ type keyMap struct {
 	Up, Down, Filter, Edit, Refine, Sync, Doctor, Reload, Readme, Focus, Help, Quit, Back key.Binding
 	Confirm, TogglePush, Install, Explore, Config                                         key.Binding
 	Toggle, Rename, Move                                                                  key.Binding
-	Upstream, Update, Delete                                                              key.Binding
+	Upstream, Update, UpdateAll, Delete                                                   key.Binding
 	Tree, Collapse, Expand                                                                key.Binding
 }
 
@@ -28,6 +28,7 @@ func newKeyMap() keyMap {
 		Refine:     key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "refine (own only)")),
 		Upstream:   key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "check upstream")),
 		Update:     key.NewBinding(key.WithKeys("U"), key.WithHelp("U", "update outdated skill")),
+		UpdateAll:  key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "update all global skills")),
 		Delete:     key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "delete skill")),
 		Toggle:     key.NewBinding(key.WithKeys("c", "x", "o"), key.WithHelp("c/x/o", "toggle claude/codex/omp")),
 		Focus:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "focus preview")),
@@ -49,7 +50,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Filter, k.Tree, k.Collapse, k.Expand, k.Focus},
-		{k.Edit, k.Refine, k.Toggle, k.Rename, k.Move, k.Sync, k.Install, k.Explore, k.Doctor, k.Reload, k.Readme, k.Upstream, k.Update, k.Delete},
+		{k.Edit, k.Refine, k.Toggle, k.Rename, k.Move, k.Sync, k.Install, k.Explore, k.Doctor, k.Reload, k.Readme, k.Upstream, k.Update, k.UpdateAll, k.Delete},
 		{k.Config, k.Help, k.Back, k.Quit},
 	}
 }

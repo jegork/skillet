@@ -65,7 +65,7 @@ type Config struct {
 	Find       func(ctx context.Context, query string) ([]registry.Result, error) // nil disables registry search
 	Install    func(ctx context.Context, source, skill string) error
 	Upstream   func(ctx context.Context, force bool) error // nil disables the upstream check
-	UpdateCmd  func(name string) *exec.Cmd                 // nil disables updating
+	UpdateCmd  func(name string) *exec.Cmd                 // empty name updates all global skills; nil disables updating
 	Vendors    func() []explore.Skill                      // nil disables the explore view
 	RemoveCmd  func(name string) *exec.Cmd                 // nil disables deleting vendored globals
 }
@@ -210,19 +210,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.installed(msg)
 	case updateDoneMsg:
 		if msg.err != nil {
-			m.flash = "update " + msg.name + ": " + msg.err.Error()
+			m.flash = "update " + updateTarget(msg.name) + ": " + msg.err.Error()
 			return m, m.reload()
 		}
 		return m, m.finishUpdate(msg.name)
 	case updatedMsg:
 		if msg.err != nil {
-			m.flash = "update " + msg.name + ": " + msg.err.Error()
+			m.flash = "update " + updateTarget(msg.name) + ": " + msg.err.Error()
 			return m, m.reload()
 		}
 		m.mode = modeList
 		m.selectNext = msg.name
 		cmd := m.setInventory(msg.inv)
-		m.flash = "updated " + msg.name
+		m.flash = "updated " + updateTarget(msg.name)
 		return m, cmd
 	case removedMsg:
 		// the CLI removed folder, lock entry and agent links; the omp
@@ -389,6 +389,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.checkUpstream(true)
 	case key.Matches(msg, m.keys.Update):
 		return m.updateSkill()
+	case key.Matches(msg, m.keys.UpdateAll):
+		if m.cfg.UpdateCmd == nil {
+			m.flash = "update not configured"
+			return m, nil
+		}
+		return m, tea.ExecProcess(m.cfg.UpdateCmd(""), func(err error) tea.Msg { return updateDoneMsg{err: err} })
 	case key.Matches(msg, m.keys.Install):
 		return m.startSearch()
 	case key.Matches(msg, m.keys.Explore):
@@ -481,6 +487,13 @@ func (m Model) finishUpdate(name string) tea.Cmd {
 	load := m.cfg.Load
 	paths := m.inv.Paths
 	return func() tea.Msg {
+		if m.cfg.Upstream != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			if err := m.cfg.Upstream(ctx, false); err != nil {
+				return updatedMsg{err: fmt.Errorf("upstream: %w", err), name: name}
+			}
+		}
 		inv, err := load()
 		if err != nil {
 			return updatedMsg{err: err, name: name}
@@ -490,6 +503,13 @@ func (m Model) finishUpdate(name string) tea.Cmd {
 		}
 		return updatedMsg{inv: inv, name: name}
 	}
+}
+
+func updateTarget(name string) string {
+	if name == "" {
+		return "all global skills"
+	}
+	return name
 }
 
 func (m *Model) setInventory(inv inventory.Inventory) tea.Cmd {

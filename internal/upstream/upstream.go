@@ -194,7 +194,7 @@ func Evaluate(lock skill.Lock, c Cache) map[string]Info {
 			if up, ok := rc.Trees[path.Dir(e.SkillPath)]; ok {
 				if up == e.SkillFolderHash {
 					info.State = Current
-				} else {
+				} else if !installedAfter(e, rc.FetchedAt) {
 					info.State, info.Upstream = Outdated, up
 				}
 			}
@@ -202,6 +202,10 @@ func Evaluate(lock skill.Lock, c Cache) map[string]Info {
 		out[name] = info
 	}
 	return out
+}
+
+func installedAfter(e skill.LockEntry, fetchedAt time.Time) bool {
+	return e.UpdatedAt.After(fetchedAt) || e.InstalledAt.After(fetchedAt)
 }
 
 // Refresh fetches every lock repo whose cache entry is stale (all of them
@@ -216,14 +220,18 @@ func Refresh(ctx context.Context, cachePath string, lock skill.Lock, f Fetcher, 
 	}
 	now := time.Now()
 	var sources []string
+	changed := map[string]bool{}
 	for _, e := range lock.Skills {
+		if installedAfter(e, c.Repos[e.Source].FetchedAt) {
+			changed[e.Source] = true
+		}
 		if strings.Contains(e.Source, "/") && !slices.Contains(sources, e.Source) {
 			sources = append(sources, e.Source)
 		}
 	}
 	sort.Strings(sources)
 	for _, source := range sources {
-		if rc, ok := c.Repos[source]; ok && !force && now.Sub(rc.FetchedAt) < TTL {
+		if rc, ok := c.Repos[source]; ok && !force && !changed[source] && now.Sub(rc.FetchedAt) < TTL {
 			continue
 		}
 		owner, repo, _ := strings.Cut(source, "/")
