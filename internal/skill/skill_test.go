@@ -35,6 +35,7 @@ func TestScanReadsFrontmatter(t *testing.T) {
 	h.RawSkill("nodesc", "---\nname: nodesc\n---\nbody\n")
 	h.RawSkill("renamed", "---\nname: other-name\ndescription: d\n---\n")
 	h.RawSkill("plain", "no frontmatter here\n")
+	h.RawSkill("badyaml", "---\nname: badyaml\ndescription: Runs with `isolate: false` and explains why. Use when tests hang.\n---\nbody\n")
 	h.RawSkill("vendorish", "---\nname: vendorish\ndescription: v\nlicense: MIT\nmetadata:\n  author: acme\n  version: \"1.0.0\"\n---\n")
 	h.EmptySkill("empty")
 	h.Readme("| `alpha` | own | does alpha things |")
@@ -44,8 +45,8 @@ func TestScanReadsFrontmatter(t *testing.T) {
 	if _, ok := got["README.md"]; ok {
 		t.Error("README.md listed as a skill")
 	}
-	if len(got) != 7 {
-		t.Fatalf("got %d skills, want 7", len(got))
+	if len(got) != 8 {
+		t.Fatalf("got %d skills, want 8", len(got))
 	}
 	if v := got["vendorish"]; v.Author != "acme" || v.License != "MIT" {
 		t.Errorf("vendor markers not parsed: %+v", v)
@@ -62,6 +63,7 @@ func TestScanReadsFrontmatter(t *testing.T) {
 		{"nodesc", "", "nodesc", true},
 		{"renamed", "d", "other-name", true},
 		{"plain", "", "", true},
+		{"badyaml", "Runs with `isolate: false` and explains why. Use when tests hang.", "badyaml", true},
 		{"empty", "", "", false},
 	}
 	for _, c := range cases {

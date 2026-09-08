@@ -69,10 +69,36 @@ func ParseFrontmatter(b []byte) (Frontmatter, error) {
 		return fm, ErrNoFrontmatter
 	}
 	if err := yaml.Unmarshal(rest[:end], &fm); err != nil {
+		// descriptions written by agents often carry an unquoted `key: value`
+		// inside the sentence, which is invalid yaml but still readable line by line
+		if lenient, ok := scalarLines(rest[:end]); ok {
+			return lenient, nil
+		}
 		return fm, fmt.Errorf("frontmatter: %w", err)
 	}
 	fm.Description = strings.TrimSpace(fm.Description)
 	return fm, nil
+}
+
+func scalarLines(b []byte) (Frontmatter, bool) {
+	var fm Frontmatter
+	found := false
+	for _, line := range strings.Split(string(b), "\n") {
+		key, value, ok := strings.Cut(line, ":")
+		if !ok || strings.HasPrefix(line, " ") {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		switch key {
+		case "name":
+			fm.Name, found = value, true
+		case "description":
+			fm.Description, found = value, true
+		case "license":
+			fm.License = value
+		}
+	}
+	return fm, found
 }
 
 // Scan lists every directory under skillsDir as a skill, sorted by name.
