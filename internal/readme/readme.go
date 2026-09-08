@@ -48,8 +48,11 @@ type Result struct {
 // Regenerate rewrites every row from the scanned skills, keeps each skill in
 // the section it already sits in, drops rows for skills that are gone and
 // appends unknown skills under "Uncategorized". Prose outside tables is kept.
+// The README indexes the global skills dir, so project-scoped skills are
+// ignored no matter what the caller passes.
 func Regenerate(path string, skills []skill.Skill) (Result, error) {
 	var res Result
+	skills = globalOnly(skills)
 	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		b = []byte(defaultIntro)
@@ -94,6 +97,16 @@ func Regenerate(path string, skills []skill.Skill) (Result, error) {
 	}
 	text := strings.TrimRight(strings.Join(out, "\n"), "\n") + "\n"
 	return res, os.WriteFile(path, []byte(text), 0o644)
+}
+
+func globalOnly(skills []skill.Skill) []skill.Skill {
+	var out []skill.Skill
+	for _, s := range skills {
+		if s.Scope == "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func appendUncategorized(lines []string, skills []skill.Skill) []string {

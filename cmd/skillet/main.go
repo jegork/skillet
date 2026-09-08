@@ -385,13 +385,7 @@ func runReadme(home string) error {
 	if err != nil {
 		return err
 	}
-	var global []skill.Skill
-	for _, s := range inv.Skills {
-		if s.Scope == "" {
-			global = append(global, s)
-		}
-	}
-	res, err := readme.Regenerate(inv.Paths.Readme(), global)
+	res, err := readme.Regenerate(inv.Paths.Readme(), inv.Skills)
 	if err != nil {
 		return err
 	}
