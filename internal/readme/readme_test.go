@@ -169,3 +169,44 @@ func TestAdd(t *testing.T) {
 		t.Errorf("add did not create the readme:\n%s", out2)
 	}
 }
+
+func TestRegenerateSkipsProjectSkills(t *testing.T) {
+	h := testhome.New(t)
+	h.Skill("global", "Global skill")
+	p := h.Readme()
+	skills := scan(t, h)
+	skills = append(skills, skill.Skill{Name: "proj-only", Description: "Lives in a project", Scope: "/repo"})
+
+	res, err := readme.Regenerate(p, skills)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Added != 1 {
+		t.Errorf("added %d rows, want 1 (the global skill)", res.Added)
+	}
+	b, _ := os.ReadFile(p)
+	if strings.Contains(string(b), "proj-only") {
+		t.Errorf("project-scoped skill leaked into the global index:\n%s", b)
+	}
+	if !strings.Contains(string(b), "| `global` |") {
+		t.Errorf("global skill missing:\n%s", b)
+	}
+}
+
+func TestRegenerateDropsRowsForSkillsThatMovedToProjects(t *testing.T) {
+	h := testhome.New(t)
+	p := h.Readme("| `moved` | own | used to be global |")
+	skills := []skill.Skill{{Name: "moved", Description: "now in a project", Scope: "/repo"}}
+
+	res, err := readme.Regenerate(p, skills)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Removed != 1 || res.Added != 0 {
+		t.Errorf("got %+v, want 1 removed 0 added", res)
+	}
+	b, _ := os.ReadFile(p)
+	if strings.Contains(string(b), "moved") {
+		t.Errorf("row for a skill that left the global dir survived:\n%s", b)
+	}
+}
