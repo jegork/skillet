@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/jegork/skillet/compare/v0.5.0...v0.5.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* keep project skills out of the global README index ([#29](https://github.com/jegork/skillet/issues/29)) ([375dca5](https://github.com/jegork/skillet/commit/375dca5896ee7a08ca4f886383d21eee4426949e))
+
 ## [0.5.0](https://github.com/jegork/skillet/compare/v0.4.0...v0.5.0) (2026-09-06)
 
 
